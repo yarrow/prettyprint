@@ -279,7 +279,7 @@ impl<'a> Printer for InteractivePrinter<'a> {
             let decorations = self
                 .decorations
                 .iter()
-                .map(|ref d| d.generate(line_number, false, self))
+                .map(|ref d| d.generate(line_number, false))
                 .collect::<Vec<_>>();
 
             for deco in decorations {
@@ -368,9 +368,8 @@ impl<'a> Printer for InteractivePrinter<'a> {
                                             "{} ",
                                             self.decorations
                                                 .iter()
-                                                .map(|ref d| d
-                                                    .generate(line_number, true, self)
-                                                    .text).collect::<Vec<String>>()
+                                                .map(|ref d| d.generate(line_number, true).text)
+                                                .collect::<Vec<String>>()
                                                 .join(" ")
                                         ))
                                     } else {
@@ -428,7 +427,7 @@ impl Colors {
         Colors::default()
     }
 
-    fn colored(theme: &Theme, true_color: bool) -> Self {
+    pub fn colored(theme: &Theme, true_color: bool) -> Self {
         let gutter_color = theme
             .settings
             .gutter_foreground
