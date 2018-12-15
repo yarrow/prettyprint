@@ -10,7 +10,7 @@ use console::AnsiCodeIterator;
 
 use syntect::easy::HighlightLines;
 use syntect::highlighting::Theme;
-use syntect::parsing::SyntaxSet;
+use syntect::parsing::{SyntaxReference, SyntaxSet};
 
 use content_inspector::ContentType;
 
@@ -78,7 +78,38 @@ impl<'a> InteractivePrinter<'a> {
         use_italic_text: bool,
     ) -> Self {
         let theme = assets.get_theme(&theme);
+        let syntax = assets.get_syntax(language, file, reader, &syntax_mapping);
+        let syntax_set = &assets.syntax_set;
+        InteractivePrinter::new2(
+            theme,
+            syntax,
+            syntax_set,
+            reader.content_type,
+            output_components,
+            colored_output,
+            true_color,
+            term_width,
+            tab_width,
+            show_nonprintable,
+            output_wrap,
+            use_italic_text,
+        )
+    }
 
+    pub(crate) fn new2(
+        theme: &'a Theme,
+        syntax: &'a SyntaxReference,
+        syntax_set: &'a SyntaxSet,
+        content_type: ContentType,
+        output_components: OutputComponents,
+        colored_output: bool,
+        true_color: bool,
+        term_width: usize,
+        tab_width: usize,
+        show_nonprintable: bool,
+        output_wrap: OutputWrap,
+        use_italic_text: bool,
+    ) -> Self {
         let colors = if colored_output {
             Colors::colored(theme, true_color)
         } else {
@@ -109,11 +140,10 @@ impl<'a> InteractivePrinter<'a> {
             panel_width = 0;
         }
 
-        let highlighter = if reader.content_type.is_binary() {
+        let highlighter = if content_type.is_binary() {
             None
         } else {
             // Determine the type of syntax for highlighting
-            let syntax = assets.get_syntax(language, file, reader, &syntax_mapping);
             Some(HighlightLines::new(syntax, theme))
         };
 
@@ -121,10 +151,10 @@ impl<'a> InteractivePrinter<'a> {
             panel_width,
             colors,
             decorations,
-            content_type: reader.content_type,
+            content_type,
             ansi_prefix_sgr: String::new(),
             highlighter,
-            syntax_set: &assets.syntax_set,
+            syntax_set,
             output_components,
             colored_output,
             true_color,
