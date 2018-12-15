@@ -35,6 +35,9 @@ mod style;
 mod syntax_mapping;
 mod terminal;
 
+#[cfg(test)]
+mod test_ansi_code_preservation;
+
 pub use builder::{PagingMode, PrettyPrint, PrettyPrinter};
 // pub use style::OutputComponent;
 
