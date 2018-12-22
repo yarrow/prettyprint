@@ -34,7 +34,7 @@ fn must_be_equal_to_stored_results(actual: TestResult, expected: &str) {
     for key in expected.keys() {
         if actual[key] != expected[key] {
             println!(
-                "Actual != expected for: {}\n{}\n{}\n",
+                "Actual != expected for {}\nActual:\n{}\nExpected:\n{}\n",
                 key, actual[key], expected[key]
             );
             assert_eq!(actual[key], expected[key], "\nsettings are: {}\n", key);
@@ -71,6 +71,7 @@ fn sample_test_cases() -> TestResult {
         PrintSettings { line_numbers: false, ..default },
         PrintSettings { colored_output: false, true_color: false, ..default },
         PrintSettings { true_color: false, ..default },
+        PrintSettings { term_width: 10, output_wrap: OutputWrap::Character, ..default },
         PrintSettings { term_width: 10, ..default },
         PrintSettings { tab_width: 0, ..default },
         PrintSettings { tab_width: 8, ..default },

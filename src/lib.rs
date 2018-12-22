@@ -24,7 +24,6 @@ extern crate syntect;
 
 mod assets;
 mod builder;
-mod decorations;
 mod dirs;
 mod inputfile;
 mod line_range;
