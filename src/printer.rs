@@ -120,7 +120,7 @@ impl<'a> InteractivePrinter<'a> {
         let mut decorations: Vec<Box<dyn Decoration>> = Vec::new();
 
         if output_components.numbers() {
-            decorations.push(Box::new(LineNumberDecoration::new(&colors)));
+            decorations.push(Box::new(LineNumberDecoration::new()));
         }
 
         let mut panel_width: usize =
@@ -130,7 +130,7 @@ impl<'a> InteractivePrinter<'a> {
         // print_horizontal_line, print_header, and print_footer functions all assume the panel
         // width is without the grid border.
         if output_components.grid() && !decorations.is_empty() {
-            decorations.push(Box::new(GridBorderDecoration::new(&colors)));
+            decorations.push(Box::new(GridBorderDecoration::new()));
         }
 
         // Disable the panel if the terminal is too small (i.e. can't fit 5 characters with the
@@ -168,15 +168,11 @@ impl<'a> InteractivePrinter<'a> {
 
     fn print_horizontal_line(&mut self, handle: &mut Write, grid_char: char) -> Result<()> {
         if self.panel_width == 0 {
-            writeln!(
-                handle,
-                "{}",
-                self.colors.grid.paint("─".repeat(self.term_width))
-            )?;
+            writeln!(handle, "{}", self.gutter("─".repeat(self.term_width)))?;
         } else {
             let hline = "─".repeat(self.term_width - (self.panel_width + 1));
             let hline = format!("{}{}{}", "─".repeat(self.panel_width), grid_char, hline);
-            writeln!(handle, "{}", self.colors.grid.paint(hline))?;
+            writeln!(handle, "{}", self.gutter(hline))?;
         }
 
         Ok(())
@@ -188,6 +184,14 @@ impl<'a> InteractivePrinter<'a> {
         } else {
             text.to_string()
         }
+    }
+
+    fn caption<S: AsRef<str>>(&self, name: S) -> String {
+        self.colors.filename.paint(name.as_ref()).to_string()
+    }
+
+    fn gutter<S: AsRef<str>>(&self, gutter_text: S) -> String {
+        self.colors.grid.paint(gutter_text.as_ref()).to_string()
     }
 }
 
@@ -209,9 +213,7 @@ impl<'a> Printer for InteractivePrinter<'a> {
                 handle,
                 "{}{}",
                 " ".repeat(self.panel_width),
-                self.colors
-                    .grid
-                    .paint(if self.panel_width > 0 { "│ " } else { "" }),
+                self.gutter(if self.panel_width > 0 { "│ " } else { "" }),
             )?;
         } else {
             write!(handle, "{}", " ".repeat(self.panel_width))?;
@@ -234,13 +236,7 @@ impl<'a> Printer for InteractivePrinter<'a> {
             _ => "",
         };
 
-        writeln!(
-            handle,
-            "{}{}{}",
-            prefix,
-            self.colors.filename.paint(name),
-            mode
-        )?;
+        writeln!(handle, "{}{}{}", prefix, self.caption(&name), mode)?;
 
         if self.output_components.grid() {
             if self.content_type.is_text() {
@@ -309,13 +305,12 @@ impl<'a> Printer for InteractivePrinter<'a> {
             let decorations = self
                 .decorations
                 .iter()
-                .map(|ref d| d.generate(line_number, false))
-                .collect::<Vec<_>>();
+                .map(|ref d| d.generate(line_number, false).text)
+                .collect::<Vec<_>>()
+                .join(" ");
 
-            for deco in decorations {
-                write!(handle, "{} ", deco.text)?;
-                cursor_max -= deco.width + 1;
-            }
+            write!(handle, "{} ", self.gutter(&decorations))?;
+            cursor_max -= decorations.len() + 1;
         }
 
         // Line contents.
@@ -398,7 +393,8 @@ impl<'a> Printer for InteractivePrinter<'a> {
                                             "{} ",
                                             self.decorations
                                                 .iter()
-                                                .map(|ref d| d.generate(line_number, true).text)
+                                                .map(|ref d| self
+                                                    .gutter(d.generate(line_number, true).text))
                                                 .collect::<Vec<String>>()
                                                 .join(" ")
                                         ))
