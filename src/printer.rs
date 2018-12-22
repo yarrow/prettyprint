@@ -1,5 +1,4 @@
 use std::io::Write;
-use std::vec::Vec;
 
 use ansi_term::Colour::Fixed;
 use ansi_term::Style;
@@ -18,7 +17,6 @@ use encoding::all::{UTF_16BE, UTF_16LE};
 use encoding::{DecoderTrap, Encoding};
 
 use assets::HighlightingAssets;
-use decorations::{Decoration, GridBorderDecoration, LineNumberDecoration};
 use errors::*;
 use inputfile::{InputFile, InputFileReader};
 use preprocessor::{expand_tabs, replace_nonprintable};
@@ -44,7 +42,7 @@ pub trait Printer {
 
 pub struct InteractivePrinter<'a> {
     colors: Colors,
-    decorations: Vec<Box<dyn Decoration>>,
+    decorations: Option<&'static str>,
     panel_width: usize,
     ansi_prefix_sgr: String,
     content_type: ContentType,
@@ -58,6 +56,16 @@ pub struct InteractivePrinter<'a> {
     show_nonprintable: bool,
     output_wrap: OutputWrap,
     use_italic_text: bool,
+}
+
+const LNUM_DIGITS: usize = 4;
+fn lnum(line_number: usize, continuation: bool) -> String {
+    let num = format!("{:4}", line_number);
+    if continuation {
+        " ".repeat(num.len())
+    } else {
+        num
+    }
 }
 
 impl<'a> InteractivePrinter<'a> {
@@ -116,29 +124,19 @@ impl<'a> InteractivePrinter<'a> {
             Colors::plain()
         };
 
-        // Create decorations.
-        let mut decorations: Vec<Box<dyn Decoration>> = Vec::new();
+        // Since the print_horizontal_line, print_header, and print_footer
+        // functions all assume the panel width is without the grid border,
+        // panel_width only counts the space for line numbers.
+        let nominal_panel_width = LNUM_DIGITS + 1;
+        let grid_str = if output_components.grid() { " │" } else { "" };
 
-        if output_components.numbers() {
-            decorations.push(Box::new(LineNumberDecoration::new()));
-        }
-
-        let mut panel_width: usize =
-            decorations.len() + decorations.iter().fold(0, |a, x| a + x.width());
-
-        // The grid border decoration isn't added until after the panel_width calculation, since the
-        // print_horizontal_line, print_header, and print_footer functions all assume the panel
-        // width is without the grid border.
-        if output_components.grid() && !decorations.is_empty() {
-            decorations.push(Box::new(GridBorderDecoration::new()));
-        }
-
-        // Disable the panel if the terminal is too small (i.e. can't fit 5 characters with the
-        // panel showing).
-        if term_width < (decorations.len() + decorations.iter().fold(0, |a, x| a + x.width())) + 5 {
-            decorations.clear();
-            panel_width = 0;
-        }
+        let term_width_needed = nominal_panel_width + grid_str.len() + 5;
+        let (decorations, panel_width) =
+            if output_components.numbers() && term_width >= term_width_needed {
+                (Some(grid_str), nominal_panel_width)
+            } else {
+                (None, 0)
+            };
 
         let highlighter = if content_type.is_binary() {
             None
@@ -301,16 +299,10 @@ impl<'a> Printer for InteractivePrinter<'a> {
         let mut panel_wrap: Option<String> = None;
 
         // Line decorations.
-        if self.panel_width > 0 {
-            let decorations = self
-                .decorations
-                .iter()
-                .map(|ref d| d.generate(line_number, false).text)
-                .collect::<Vec<_>>()
-                .join(" ");
-
-            write!(handle, "{} ", self.gutter(&decorations))?;
-            cursor_max -= decorations.len() + 1;
+        if let Some(grid_str) = self.decorations {
+            let deco = lnum(line_number, false) + grid_str;
+            write!(handle, "{} ", self.gutter(&deco))?;
+            cursor_max -= deco.len() + 1;
         }
 
         // Line contents.
@@ -388,16 +380,9 @@ impl<'a> Printer for InteractivePrinter<'a> {
 
                                 // Generate wrap padding if not already generated.
                                 if panel_wrap.is_none() {
-                                    panel_wrap = if self.panel_width > 0 {
-                                        Some(format!(
-                                            "{} ",
-                                            self.decorations
-                                                .iter()
-                                                .map(|ref d| self
-                                                    .gutter(d.generate(line_number, true).text))
-                                                .collect::<Vec<String>>()
-                                                .join(" ")
-                                        ))
+                                    panel_wrap = if let Some(grid_str) = self.decorations {
+                                        let deco = lnum(line_number, true) + grid_str;
+                                        Some(format!("{} ", self.gutter(&deco)))
                                     } else {
                                         Some("".to_string())
                                     }
