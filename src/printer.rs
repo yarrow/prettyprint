@@ -166,11 +166,15 @@ impl<'a> InteractivePrinter<'a> {
 
     fn print_horizontal_line(&mut self, handle: &mut Write, grid_char: char) -> Result<()> {
         if self.panel_width == 0 {
-            writeln!(handle, "{}", self.gutter("─".repeat(self.term_width)))?;
+            writeln!(
+                handle,
+                "{}",
+                self.color_gutter("─".repeat(self.term_width))
+            )?;
         } else {
             let hline = "─".repeat(self.term_width - (self.panel_width + 1));
             let hline = format!("{}{}{}", "─".repeat(self.panel_width), grid_char, hline);
-            writeln!(handle, "{}", self.gutter(hline))?;
+            writeln!(handle, "{}", self.color_gutter(hline))?;
         }
 
         Ok(())
@@ -184,11 +188,11 @@ impl<'a> InteractivePrinter<'a> {
         }
     }
 
-    fn caption<S: AsRef<str>>(&self, name: S) -> String {
+    fn color_filename<S: AsRef<str>>(&self, name: S) -> String {
         self.colors.filename.paint(name.as_ref()).to_string()
     }
 
-    fn gutter<S: AsRef<str>>(&self, gutter_text: S) -> String {
+    fn color_gutter<S: AsRef<str>>(&self, gutter_text: S) -> String {
         self.colors.grid.paint(gutter_text.as_ref()).to_string()
     }
 }
@@ -211,7 +215,7 @@ impl<'a> Printer for InteractivePrinter<'a> {
                 handle,
                 "{}{}",
                 " ".repeat(self.panel_width),
-                self.gutter(if self.panel_width > 0 { "│ " } else { "" }),
+                self.color_gutter(if self.panel_width > 0 { "│ " } else { "" }),
             )?;
         } else {
             write!(handle, "{}", " ".repeat(self.panel_width))?;
@@ -234,7 +238,7 @@ impl<'a> Printer for InteractivePrinter<'a> {
             _ => "",
         };
 
-        writeln!(handle, "{}{}{}", prefix, self.caption(&name), mode)?;
+        writeln!(handle, "{}{}{}", prefix, self.color_filename(&name), mode)?;
 
         if self.output_components.grid() {
             if self.content_type.is_text() {
@@ -279,14 +283,10 @@ impl<'a> Printer for InteractivePrinter<'a> {
             line = replace_nonprintable(&mut line, self.tab_width);
         }
 
-        let regions = {
-            let highlighter = match self.highlighter {
-                Some(ref mut highlighter) => highlighter,
-                _ => {
-                    return Ok(());
-                }
-            };
+        let regions = if let Some(ref mut highlighter) = self.highlighter {
             highlighter.highlight(line.as_ref(), self.syntax_set)
+        } else {
+            return Ok(());
         };
 
         if out_of_range {
@@ -301,7 +301,7 @@ impl<'a> Printer for InteractivePrinter<'a> {
         // Line decorations.
         if let Some(grid_str) = self.decorations {
             let deco = lnum(line_number, false) + grid_str;
-            write!(handle, "{} ", self.gutter(&deco))?;
+            write!(handle, "{} ", self.color_gutter(&deco))?;
             cursor_max -= deco.len() + 1;
         }
 
@@ -312,7 +312,7 @@ impl<'a> Printer for InteractivePrinter<'a> {
             let italics = self.use_italic_text;
 
             for &(style, region) in regions.iter() {
-                let text = &*self.preprocess(region, &mut cursor_total);
+                let text = self.preprocess(region, &mut cursor_total);
                 write!(
                     handle,
                     "{}",
@@ -382,7 +382,7 @@ impl<'a> Printer for InteractivePrinter<'a> {
                                 if panel_wrap.is_none() {
                                     panel_wrap = if let Some(grid_str) = self.decorations {
                                         let deco = lnum(line_number, true) + grid_str;
-                                        Some(format!("{} ", self.gutter(&deco)))
+                                        Some(format!("{} ", self.color_gutter(&deco)))
                                     } else {
                                         Some("".to_string())
                                     }
@@ -430,7 +430,6 @@ const DEFAULT_GUTTER_COLOR: u8 = 238;
 pub struct Colors {
     pub grid: Style,
     pub filename: Style,
-    pub line_number: Style,
 }
 
 impl Colors {
@@ -448,7 +447,6 @@ impl Colors {
         Colors {
             grid: gutter_color.normal(),
             filename: Style::new().bold(),
-            line_number: gutter_color.normal(),
         }
     }
 }
