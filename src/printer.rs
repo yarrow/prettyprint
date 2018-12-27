@@ -165,18 +165,19 @@ impl<'a> InteractivePrinter<'a> {
     }
 
     fn print_horizontal_line(&mut self, handle: &mut Write, grid_char: char) -> Result<()> {
-        if self.panel_width == 0 {
-            writeln!(
-                handle,
-                "{}",
-                self.color_gutter("─".repeat(self.term_width))
-            )?;
-        } else {
-            let hline = "─".repeat(self.term_width - (self.panel_width + 1));
-            let hline = format!("{}{}{}", "─".repeat(self.panel_width), grid_char, hline);
-            writeln!(handle, "{}", self.color_gutter(hline))?;
+        fn hchars(n: usize) -> String {
+            "─".repeat(n)
         }
 
+        let hline = if self.panel_width == 0 {
+            hchars(self.term_width)
+        } else {
+            let prefix = hchars(self.panel_width);
+            let suffix = hchars(self.term_width - (self.panel_width + 1));
+            format!("{}{}{}", prefix, grid_char, suffix)
+        };
+
+        writeln!(handle, "{}", self.color_gutter(hline))?;
         Ok(())
     }
 
