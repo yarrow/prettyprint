@@ -37,6 +37,7 @@ syntect = "3.0.2"
 lazy_static = "1.2.0"
 atty = "0.2.11"
 derive_builder = "0.7.0"
+unicode-width = "0.1.5"
 
 [dev-dependencies]
 serde = "1.0"

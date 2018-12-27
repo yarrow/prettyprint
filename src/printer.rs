@@ -5,11 +5,11 @@ use ansi_term::Style;
 use style::OutputComponents;
 use syntax_mapping::SyntaxMapping;
 
-use console::AnsiCodeIterator;
-
 use syntect::easy::HighlightLines;
-use syntect::highlighting::Theme;
+use syntect::highlighting::{self, Theme};
 use syntect::parsing::{SyntaxReference, SyntaxSet};
+
+use unicode_width::UnicodeWidthStr;
 
 use content_inspector::ContentType;
 
@@ -44,7 +44,6 @@ pub struct InteractivePrinter<'a> {
     colors: Colors,
     decorations: Option<&'static str>,
     panel_width: usize,
-    ansi_prefix_sgr: String,
     content_type: ContentType,
     highlighter: Option<HighlightLines<'a>>,
     syntax_set: &'a SyntaxSet,
@@ -150,7 +149,6 @@ impl<'a> InteractivePrinter<'a> {
             colors,
             decorations,
             content_type,
-            ansi_prefix_sgr: String::new(),
             highlighter,
             syntax_set,
             output_components,
@@ -195,6 +193,16 @@ impl<'a> InteractivePrinter<'a> {
 
     fn color_gutter<S: AsRef<str>>(&self, gutter_text: S) -> String {
         self.colors.grid.paint(gutter_text.as_ref()).to_string()
+    }
+
+    fn color_region<S: AsRef<str>>(&self, style: highlighting::Style, text: S) -> String {
+        as_terminal_escaped(
+            style,
+            text.as_ref(),
+            self.true_color,
+            self.colored_output,
+            self.use_italic_text,
+        )
     }
 }
 
@@ -302,23 +310,15 @@ impl<'a> Printer for InteractivePrinter<'a> {
         // Line decorations.
         if let Some(grid_str) = self.decorations {
             let deco = lnum(line_number, false) + grid_str;
-            write!(handle, "{} ", self.color_gutter(&deco))?;
-            cursor_max -= deco.len() + 1;
+            cursor_max -= UnicodeWidthStr::width(deco.as_str()) + 1;
+            write!(handle, "{} ", self.color_gutter(deco.as_str()))?;
         }
 
         // Line contents.
         if self.output_wrap == OutputWrap::None {
-            let true_color = self.true_color;
-            let colored_output = self.colored_output;
-            let italics = self.use_italic_text;
-
             for &(style, region) in regions.iter() {
                 let text = self.preprocess(region, &mut cursor_total);
-                write!(
-                    handle,
-                    "{}",
-                    as_terminal_escaped(style, &*text, true_color, colored_output, italics,)
-                )?;
+                write!(handle, "{}", self.color_region(style, text),)?;
             }
 
             if line.bytes().next_back() != Some(b'\n') {
@@ -326,95 +326,47 @@ impl<'a> Printer for InteractivePrinter<'a> {
             }
         } else {
             for &(style, region) in regions.iter() {
-                let mut ansi_iterator = AnsiCodeIterator::new(region);
-                let mut ansi_prefix: String = String::new();
-                for chunk in ansi_iterator {
-                    match chunk {
-                        // ANSI escape passthrough.
-                        (text, true) => {
-                            if text.chars().last().map_or(false, |c| c == 'm') {
-                                ansi_prefix.push_str(text);
-                                if text == "\x1B[0m" {
-                                    self.ansi_prefix_sgr = "\x1B[0m".to_owned();
-                                } else {
-                                    self.ansi_prefix_sgr.push_str(text);
-                                }
-                            } else {
-                                ansi_prefix.push_str(text);
-                            }
-                        }
+                let text = self.preprocess(
+                    region.trim_right_matches(|c| c == '\r' || c == '\n'),
+                    &mut cursor_total,
+                );
 
-                        // Regular text.
-                        (text, false) => {
-                            let text = self.preprocess(
-                                text.trim_right_matches(|c| c == '\r' || c == '\n'),
-                                &mut cursor_total,
-                            );
+                let mut chars = text.chars();
+                let mut remaining = text.chars().count();
 
-                            let mut chars = text.chars();
-                            let mut remaining = text.chars().count();
+                while remaining > 0 {
+                    let available = cursor_max - cursor;
 
-                            while remaining > 0 {
-                                let available = cursor_max - cursor;
+                    if remaining <= available {
+                        // It fits.
+                        let text = chars.by_ref().take(remaining).collect::<String>();
+                        cursor += remaining;
 
-                                // It fits.
-                                if remaining <= available {
-                                    let text = chars.by_ref().take(remaining).collect::<String>();
-                                    cursor += remaining;
+                        write!(handle, "{}", self.color_region(style, text))?;
+                        break;
+                    }
 
-                                    write!(
-                                        handle,
-                                        "{}",
-                                        as_terminal_escaped(
-                                            style,
-                                            &*format!(
-                                                "{}{}{}",
-                                                self.ansi_prefix_sgr, ansi_prefix, text
-                                            ),
-                                            self.true_color,
-                                            self.colored_output,
-                                            self.use_italic_text
-                                        )
-                                    )?;
-                                    break;
-                                }
-
-                                // Generate wrap padding if not already generated.
-                                if panel_wrap.is_none() {
-                                    panel_wrap = if let Some(grid_str) = self.decorations {
-                                        let deco = lnum(line_number, true) + grid_str;
-                                        Some(format!("{} ", self.color_gutter(&deco)))
-                                    } else {
-                                        Some("".to_string())
-                                    }
-                                }
-
-                                // It wraps.
-                                let text = chars.by_ref().take(available).collect::<String>();
-                                cursor = 0;
-                                remaining -= available;
-
-                                write!(
-                                    handle,
-                                    "{}\n{}",
-                                    as_terminal_escaped(
-                                        style,
-                                        &*format!(
-                                            "{}{}{}",
-                                            self.ansi_prefix_sgr, ansi_prefix, text
-                                        ),
-                                        self.true_color,
-                                        self.colored_output,
-                                        self.use_italic_text
-                                    ),
-                                    panel_wrap.clone().unwrap()
-                                )?;
-                            }
-
-                            // Clear the ANSI prefix buffer.
-                            ansi_prefix.clear();
+                    if panel_wrap.is_none() {
+                        // Generate wrap padding if not already generated.
+                        panel_wrap = if let Some(grid_str) = self.decorations {
+                            let deco = lnum(line_number, true) + grid_str;
+                            Some(format!("{} ", self.color_gutter(&deco)))
+                        } else {
+                            Some("".to_string())
                         }
                     }
+
+                    // It wraps.
+                    let text = chars.by_ref().take(available).collect::<String>();
+                    cursor = 0;
+                    remaining -= available;
+
+                    write!(
+                        handle,
+                        "{}\n{}",
+                        self.color_region(style, text),
+                        panel_wrap.clone().unwrap()
+                    )?;
                 }
             }
 
