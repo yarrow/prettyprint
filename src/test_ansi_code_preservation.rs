@@ -17,6 +17,55 @@ use std::{
 use style::{OutputComponent, OutputComponents, OutputWrap};
 use syntect::highlighting;
 
+#[test]
+fn test_line_wrap() {
+    const LINE: &str = r#"
+const LINE: &str = "abc defghijklmno pqrs tuv wxyz";
+"#;
+    const EXPECTED: &str = r#"   1 │ 
+   2 │ const LINE: &
+     │ str = "abc de
+     │ fghijklmno pq
+     │ rs tuv wxyz";
+─────┴──────────────
+"#;
+    let assets = HighlightingAssets::new();
+    let settings = PrintSettings {
+        content_type: ContentType::UTF_8,
+        grid: true,
+        header: false,
+        line_numbers: true,
+        colored_output: false,
+        true_color: false,
+        term_width: 20,
+        tab_width: 4,
+        show_nonprintable: false,
+        output_wrap: OutputWrap::Character,
+        use_italic_text: false,
+        header_overwrite: false,
+        gutter_color: None,
+    };
+    let result = output_for(&assets, &settings, LINE);
+    println!("{}", result);
+    assert_eq!(result, EXPECTED);
+}
+
+fn output_for(
+    assets: &HighlightingAssets,
+    settings: &PrintSettings,
+    input: &str,
+    ) -> String {
+
+    let input = InputFile::String(input.to_string());
+    let mut reader = input.get_reader().unwrap();
+
+    let theme = theme_with_gutter(&assets, settings.gutter_color);
+    let mut printer = a_printer(&assets, &theme, &settings);
+
+    let output = pretty_printed(&mut reader, &mut printer, settings.header_overwrite).unwrap();
+    String::from_utf8(output).unwrap()
+}
+
 /// First we test that a few representative settings produce the same result as
 /// the original code
 #[test]
@@ -107,19 +156,10 @@ pub fn fib(n: usize) -> usize {
 }
 ";
 
-    let theme = theme_with_gutter(&assets, settings.gutter_color);
-
-    let input = InputFile::String(FIB.to_string());
-    let mut reader = input.get_reader().unwrap();
-
-    let mut printer = a_printer(&assets, &theme, &settings);
-
-    let output = pretty_printed(&mut reader, &mut printer, settings.header_overwrite).unwrap();
-    let output = String::from_utf8(output).unwrap();
-
+    let result = output_for(&assets, &settings, FIB);
     let key: String = format!("{}", settings);
-    //                                                println!("{}:\n{}", key, output);
-    (key, output)
+    //                                                println!("{}:\n{}", key, result);
+    (key, result)
 }
 
 fn pretty_printed<'a, P: Printer>(
