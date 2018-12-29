@@ -1,3 +1,9 @@
+#![cfg_attr(debug_assertions, allow(dead_code, unused_imports))]
+#![deny(unused_must_use)]
+#![cfg_attr(feature = "cargo-clippy", deny(clippy))]
+#![cfg_attr(feature = "cargo-clippy", warn(clippy_pedantic))]
+//#![warn(missing_docs)]
+
 // `error_chain!` can recurse deeply
 #![recursion_limit = "1024"]
 
