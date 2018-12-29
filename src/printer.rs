@@ -40,10 +40,113 @@ pub trait Printer {
     ) -> Result<()>;
 }
 
+pub struct Frame {
+    gutter: Option<&'static str>,
+    term_width: usize,
+    line_number_width: usize,
+}
+
+const LNUM_DIGITS: usize = 4;
+
+impl Frame {
+    fn new(term_width: usize, numbers: bool, grid: bool) -> Self {
+        let separator = if grid { " │ " } else { " " };
+        let term_width_needed = LNUM_DIGITS + separator.len() + 5;
+        let (gutter, line_number_width) = if numbers && term_width >= term_width_needed {
+            (Some(separator), LNUM_DIGITS)
+        } else {
+            (None, 0)
+        };
+
+        Frame {
+            gutter,
+            term_width,
+            line_number_width,
+        }
+    }
+
+    fn horizontal_line(&self, grid_char: char) -> String {
+        fn hchars(n: usize) -> String {
+            "─".repeat(n)
+        }
+
+        if self.line_number_width == 0 {
+            hchars(self.term_width)
+        } else {
+            const GRID_CHAR_WIDTH: usize = 1;
+            let prefix_width = self.line_number_width + 1; // Line number and a space character
+            let suffix_width = self.term_width - prefix_width - GRID_CHAR_WIDTH;
+            format!(
+                "{}{}{}",
+                hchars(prefix_width),
+                grid_char,
+                hchars(suffix_width)
+            )
+        }
+    }
+
+    fn numbered_gutter(&mut self, line_number: usize) -> Option<String> {
+        self.gutter.map(|separator| {
+            let n = format!("{:4}", line_number);
+            self.line_number_width = n.len();
+            n + separator
+        })
+    }
+
+    fn blank_gutter(&self) -> Option<String> {
+        self.gutter
+            .map(|separator| " ".repeat(self.line_number_width) + separator)
+    }
+}
+
+#[test]
+fn large_line_numbers_modify_the_frame() {
+    const CHECK: char = '✔';
+    const CHAR_LEN: usize = 3; // UTF8 length of the "─" chars in `horizontal_line`'s output
+
+    let mut frame = Frame::new(20, true, true);
+
+    // Set normal_check to the position of the vertical-bar intersection point of a horizontal
+    // line, before we print large numbers
+    let header = frame.horizontal_line(CHECK);
+    let header_check = header.find(CHECK).unwrap();
+
+    // Normal number
+    let small_number = frame.numbered_gutter(9999).unwrap();
+    let small_blank = frame.blank_gutter().unwrap();
+    assert_eq!(small_number.len(), small_blank.len());
+
+    // Five-digit number
+    let large_number = frame.numbered_gutter(10000).unwrap();
+    let large_blank = frame.blank_gutter().unwrap();
+    assert_eq!(large_number.len(), large_blank.len());
+    assert_ne!(small_number.len(), large_number.len());
+
+    // Set footer_check to the position of the vertical-bar intersection point of a horizontal
+    // line after we print large numbers
+    let footer = frame.horizontal_line(CHECK);
+    let footer_check = footer.find(CHECK).unwrap();
+
+    assert_eq!(header_check + CHAR_LEN, footer_check);
+
+    let actual = format!(
+        "*\n{}*\n{}*\n{}*\n{}*\n{}*\n{}*\n*",
+        header, small_number, small_blank, large_number, large_blank, footer
+    );
+    let expected = "*
+─────✔──────────────*
+9999 │ *
+     │ *
+10000 │ *
+      │ *
+──────✔─────────────*
+*";
+    assert_eq!(actual, expected);
+}
+
 pub struct InteractivePrinter<'a> {
     colors: Colors,
-    decorations: Option<&'static str>,
-    panel_width: usize,
+    frame: Frame,
     content_type: ContentType,
     highlighter: Option<HighlightLines<'a>>,
     syntax_set: &'a SyntaxSet,
@@ -55,16 +158,6 @@ pub struct InteractivePrinter<'a> {
     show_nonprintable: bool,
     output_wrap: OutputWrap,
     use_italic_text: bool,
-}
-
-const LNUM_DIGITS: usize = 4;
-fn lnum(line_number: usize, continuation: bool) -> String {
-    let num = format!("{:4}", line_number);
-    if continuation {
-        " ".repeat(num.len())
-    } else {
-        num
-    }
 }
 
 impl<'a> InteractivePrinter<'a> {
@@ -123,19 +216,11 @@ impl<'a> InteractivePrinter<'a> {
             Colors::plain()
         };
 
-        // Since the print_horizontal_line, print_header, and print_footer
-        // functions all assume the panel width is without the grid border,
-        // panel_width only counts the space for line numbers.
-        let nominal_panel_width = LNUM_DIGITS + 1;
-        let grid_str = if output_components.grid() { " │" } else { "" };
-
-        let term_width_needed = nominal_panel_width + grid_str.len() + 5;
-        let (decorations, panel_width) =
-            if output_components.numbers() && term_width >= term_width_needed {
-                (Some(grid_str), nominal_panel_width)
-            } else {
-                (None, 0)
-            };
+        let frame = Frame::new(
+            term_width,
+            output_components.numbers(),
+            output_components.grid(),
+        );
 
         let highlighter = if content_type.is_binary() {
             None
@@ -145,9 +230,8 @@ impl<'a> InteractivePrinter<'a> {
         };
 
         InteractivePrinter {
-            panel_width,
+            frame,
             colors,
-            decorations,
             content_type,
             highlighter,
             syntax_set,
@@ -163,19 +247,11 @@ impl<'a> InteractivePrinter<'a> {
     }
 
     fn print_horizontal_line(&mut self, handle: &mut Write, grid_char: char) -> Result<()> {
-        fn hchars(n: usize) -> String {
-            "─".repeat(n)
-        }
-
-        let hline = if self.panel_width == 0 {
-            hchars(self.term_width)
-        } else {
-            let prefix = hchars(self.panel_width);
-            let suffix = hchars(self.term_width - (self.panel_width + 1));
-            format!("{}{}{}", prefix, grid_char, suffix)
-        };
-
-        writeln!(handle, "{}", self.color_gutter(hline))?;
+        writeln!(
+            handle,
+            "{}",
+            self.color_gutter(self.frame.horizontal_line(grid_char))
+        )?;
         Ok(())
     }
 
@@ -219,15 +295,10 @@ impl<'a> Printer for InteractivePrinter<'a> {
 
         if self.output_components.grid() {
             self.print_horizontal_line(handle, '┬')?;
+        };
 
-            write!(
-                handle,
-                "{}{}",
-                " ".repeat(self.panel_width),
-                self.color_gutter(if self.panel_width > 0 { "│ " } else { "" }),
-            )?;
-        } else {
-            write!(handle, "{}", " ".repeat(self.panel_width))?;
+        if let Some(gutter_text) = self.frame.blank_gutter() {
+            write!(handle, "{}", self.color_gutter(gutter_text))?;
         };
 
         let (prefix, name): (&str, String) = match header_overwrite {
@@ -305,13 +376,12 @@ impl<'a> Printer for InteractivePrinter<'a> {
         let mut cursor: usize = 0;
         let mut cursor_max: usize = self.term_width;
         let mut cursor_total: usize = 0;
-        let mut panel_wrap: Option<String> = None;
+        let mut panel_wrap = "".to_string();
 
-        // Line decorations.
-        if let Some(grid_str) = self.decorations {
-            let deco = lnum(line_number, false) + grid_str;
-            cursor_max -= UnicodeWidthStr::width(deco.as_str()) + 1;
-            write!(handle, "{} ", self.color_gutter(deco.as_str()))?;
+        // Frame gutter
+        if let Some(gutter_text) = self.frame.numbered_gutter(line_number) {
+            write!(handle, "{}", self.color_gutter(&gutter_text))?;
+            cursor_max -= UnicodeWidthStr::width(&gutter_text[..]);
         }
 
         // Line contents.
@@ -346,13 +416,10 @@ impl<'a> Printer for InteractivePrinter<'a> {
                         break;
                     }
 
-                    if panel_wrap.is_none() {
-                        // Generate wrap padding if not already generated.
-                        panel_wrap = if let Some(grid_str) = self.decorations {
-                            let deco = lnum(line_number, true) + grid_str;
-                            Some(format!("{} ", self.color_gutter(&deco)))
-                        } else {
-                            Some("".to_string())
+                    // Generate wrap padding if not already generated.
+                    if panel_wrap.is_empty() {
+                        if let Some(gutter_text) = self.frame.blank_gutter() {
+                            panel_wrap = self.color_gutter(&gutter_text)
                         }
                     }
 
@@ -365,7 +432,7 @@ impl<'a> Printer for InteractivePrinter<'a> {
                         handle,
                         "{}\n{}",
                         self.color_region(style, text),
-                        panel_wrap.clone().unwrap()
+                        &panel_wrap,
                     )?;
                 }
             }
