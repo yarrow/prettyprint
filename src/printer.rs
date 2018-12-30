@@ -394,22 +394,15 @@ impl<'a> Printer for InteractivePrinter<'a> {
         }
 
         // Line contents.
-        if self.output_wrap == OutputWrap::None {
-            for &(style, region) in regions.iter() {
-                let text = self.preprocess(region, &mut cursor_total);
+        for &(style, region) in regions.iter() {
+            let text = self.preprocess(
+                region.trim_right_matches(|c| c == '\r' || c == '\n'),
+                &mut cursor_total,
+            );
+
+            if self.output_wrap == OutputWrap::None {
                 write!(handle, "{}", self.colorize.region(style, text),)?;
-            }
-
-            if line.bytes().next_back() != Some(b'\n') {
-                write!(handle, "\n")?;
-            }
-        } else {
-            for &(style, region) in regions.iter() {
-                let text = self.preprocess(
-                    region.trim_right_matches(|c| c == '\r' || c == '\n'),
-                    &mut cursor_total,
-                );
-
+            } else {
                 let mut chars = text.chars();
                 let mut remaining = text.chars().count();
 
@@ -445,9 +438,8 @@ impl<'a> Printer for InteractivePrinter<'a> {
                     )?;
                 }
             }
-
-            write!(handle, "\n")?;
         }
+        write!(handle, "\n")?;
 
         Ok(())
     }
