@@ -144,20 +144,44 @@ fn large_line_numbers_modify_the_frame() {
     assert_eq!(actual, expected);
 }
 
-pub struct InteractivePrinter<'a> {
+struct Colorize {
     colors: Colors,
+    colored_output: bool,
+    true_color: bool,
+    use_italic_text: bool,
+}
+
+impl Colorize {
+    fn filename<S: AsRef<str>>(&self, name: S) -> String {
+        self.colors.filename.paint(name.as_ref()).to_string()
+    }
+
+    fn gutter<S: AsRef<str>>(&self, gutter_text: S) -> String {
+        self.colors.grid.paint(gutter_text.as_ref()).to_string()
+    }
+
+    fn region<S: AsRef<str>>(&self, style: highlighting::Style, text: S) -> String {
+        as_terminal_escaped(
+            style,
+            text.as_ref(),
+            self.true_color,
+            self.colored_output,
+            self.use_italic_text,
+        )
+    }
+}
+
+pub struct InteractivePrinter<'a> {
+    colorize: Colorize,
     frame: Frame,
     content_type: ContentType,
     highlighter: Option<HighlightLines<'a>>,
     syntax_set: &'a SyntaxSet,
     output_components: OutputComponents,
-    colored_output: bool,
-    true_color: bool,
     term_width: usize,
     tab_width: usize,
     show_nonprintable: bool,
     output_wrap: OutputWrap,
-    use_italic_text: bool,
 }
 
 impl<'a> InteractivePrinter<'a> {
@@ -210,10 +234,15 @@ impl<'a> InteractivePrinter<'a> {
         output_wrap: OutputWrap,
         use_italic_text: bool,
     ) -> Self {
-        let colors = if colored_output {
-            Colors::colored(theme, true_color)
-        } else {
-            Colors::plain()
+        let colorize = Colorize{
+            colors: if colored_output {
+                Colors::colored(theme, true_color)
+            } else {
+                Colors::plain()
+            },
+            colored_output,
+            true_color,
+            use_italic_text,
         };
 
         let frame = Frame::new(
@@ -231,18 +260,15 @@ impl<'a> InteractivePrinter<'a> {
 
         InteractivePrinter {
             frame,
-            colors,
+            colorize,
             content_type,
             highlighter,
             syntax_set,
             output_components,
-            colored_output,
-            true_color,
             term_width,
             tab_width,
             show_nonprintable,
             output_wrap,
-            use_italic_text,
         }
     }
 
@@ -250,7 +276,7 @@ impl<'a> InteractivePrinter<'a> {
         writeln!(
             handle,
             "{}",
-            self.color_gutter(self.frame.horizontal_line(grid_char))
+            self.colorize.gutter(self.frame.horizontal_line(grid_char))
         )?;
         Ok(())
     }
@@ -263,23 +289,6 @@ impl<'a> InteractivePrinter<'a> {
         }
     }
 
-    fn color_filename<S: AsRef<str>>(&self, name: S) -> String {
-        self.colors.filename.paint(name.as_ref()).to_string()
-    }
-
-    fn color_gutter<S: AsRef<str>>(&self, gutter_text: S) -> String {
-        self.colors.grid.paint(gutter_text.as_ref()).to_string()
-    }
-
-    fn color_region<S: AsRef<str>>(&self, style: highlighting::Style, text: S) -> String {
-        as_terminal_escaped(
-            style,
-            text.as_ref(),
-            self.true_color,
-            self.colored_output,
-            self.use_italic_text,
-        )
-    }
 }
 
 impl<'a> Printer for InteractivePrinter<'a> {
@@ -298,7 +307,7 @@ impl<'a> Printer for InteractivePrinter<'a> {
         };
 
         if let Some(gutter_text) = self.frame.blank_gutter() {
-            write!(handle, "{}", self.color_gutter(gutter_text))?;
+            write!(handle, "{}", self.colorize.gutter(gutter_text))?;
         };
 
         let (prefix, name): (&str, String) = match header_overwrite {
@@ -318,7 +327,7 @@ impl<'a> Printer for InteractivePrinter<'a> {
             _ => "",
         };
 
-        writeln!(handle, "{}{}{}", prefix, self.color_filename(&name), mode)?;
+        writeln!(handle, "{}{}{}", prefix, self.colorize.filename(&name), mode)?;
 
         if self.output_components.grid() {
             if self.content_type.is_text() {
@@ -380,7 +389,7 @@ impl<'a> Printer for InteractivePrinter<'a> {
 
         // Frame gutter
         if let Some(gutter_text) = self.frame.numbered_gutter(line_number) {
-            write!(handle, "{}", self.color_gutter(&gutter_text))?;
+            write!(handle, "{}", self.colorize.gutter(&gutter_text))?;
             cursor_max -= UnicodeWidthStr::width(&gutter_text[..]);
         }
 
@@ -388,7 +397,7 @@ impl<'a> Printer for InteractivePrinter<'a> {
         if self.output_wrap == OutputWrap::None {
             for &(style, region) in regions.iter() {
                 let text = self.preprocess(region, &mut cursor_total);
-                write!(handle, "{}", self.color_region(style, text),)?;
+                write!(handle, "{}", self.colorize.region(style, text),)?;
             }
 
             if line.bytes().next_back() != Some(b'\n') {
@@ -412,14 +421,14 @@ impl<'a> Printer for InteractivePrinter<'a> {
                         let text = chars.by_ref().take(remaining).collect::<String>();
                         cursor += remaining;
 
-                        write!(handle, "{}", self.color_region(style, text))?;
+                        write!(handle, "{}", self.colorize.region(style, text))?;
                         break;
                     }
 
                     // Generate wrap padding if not already generated.
                     if panel_wrap.is_empty() {
                         if let Some(gutter_text) = self.frame.blank_gutter() {
-                            panel_wrap = self.color_gutter(&gutter_text)
+                            panel_wrap = self.colorize.gutter(&gutter_text)
                         }
                     }
 
@@ -431,7 +440,7 @@ impl<'a> Printer for InteractivePrinter<'a> {
                     write!(
                         handle,
                         "{}\n{}",
-                        self.color_region(style, text),
+                        self.colorize.region(style, text),
                         &panel_wrap,
                     )?;
                 }
