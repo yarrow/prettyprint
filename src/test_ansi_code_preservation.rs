@@ -90,14 +90,20 @@ fn munge(s: &String) -> String {
 */
 type TestResult = HashMap<String, String>;
 fn must_be_equal_to_stored_results(actual: TestResult, expected: &str) {
+    // Uncomment to write new stored results
     // let new_json = serde_json::to_string_pretty(&actual).unwrap();
     // fs::write("results.json", new_json).unwrap();
+
     let json = String::from_utf8(fs::read(expected).unwrap()).unwrap();
     let expected: TestResult = serde_json::from_str(&json).unwrap();
     assert_eq!(actual.len(), expected.len());
     for key in expected.keys() {
         let a = &actual[key];
         let e = &expected[key];
+
+        // Uncomment for visual checks
+        println!("For {}\nActual:\n{}\nExpected:\n{}\n", key, a, e);
+
         if !equiv(a, e) {
             println!(
                 "Actual != expected for {}\nActual:\n{}\nExpected:\n{}\n",

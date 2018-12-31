@@ -234,7 +234,7 @@ impl<'a> InteractivePrinter<'a> {
         output_wrap: OutputWrap,
         use_italic_text: bool,
     ) -> Self {
-        let colorize = Colorize{
+        let colorize = Colorize {
             colors: if colored_output {
                 Colors::colored(theme, true_color)
             } else {
@@ -288,7 +288,6 @@ impl<'a> InteractivePrinter<'a> {
             text.to_string()
         }
     }
-
 }
 
 impl<'a> Printer for InteractivePrinter<'a> {
@@ -327,7 +326,13 @@ impl<'a> Printer for InteractivePrinter<'a> {
             _ => "",
         };
 
-        writeln!(handle, "{}{}{}", prefix, self.colorize.filename(&name), mode)?;
+        writeln!(
+            handle,
+            "{}{}{}",
+            prefix,
+            self.colorize.filename(&name),
+            mode
+        )?;
 
         if self.output_components.grid() {
             if self.content_type.is_text() {
@@ -355,7 +360,7 @@ impl<'a> Printer for InteractivePrinter<'a> {
         line_number: usize,
         line_buffer: &[u8],
     ) -> Result<()> {
-        let mut line = match self.content_type {
+        let line = match self.content_type {
             ContentType::BINARY => {
                 return Ok(());
             }
@@ -367,10 +372,6 @@ impl<'a> Printer for InteractivePrinter<'a> {
                 .unwrap_or("Invalid UTF-16BE".into()),
             _ => String::from_utf8_lossy(&line_buffer).to_string(),
         };
-
-        if self.show_nonprintable {
-            line = replace_nonprintable(&mut line, self.tab_width);
-        }
 
         let regions = if let Some(ref mut highlighter) = self.highlighter {
             highlighter.highlight(line.as_ref(), self.syntax_set)
@@ -395,10 +396,16 @@ impl<'a> Printer for InteractivePrinter<'a> {
 
         // Line contents.
         for &(style, region) in regions.iter() {
-            let text = self.preprocess(
-                region.trim_right_matches(|c| c == '\r' || c == '\n'),
-                &mut cursor_total,
-            );
+            let text = if self.show_nonprintable {
+                replace_nonprintable(region, self.tab_width)
+            } else {
+                let region = region.trim_right_matches(|c| c == '\r' || c == '\n');
+                if self.tab_width > 0 {
+                    expand_tabs(region, self.tab_width, &mut cursor_total)
+                } else {
+                    region.to_string()
+                }
+            };
 
             if self.output_wrap == OutputWrap::None {
                 write!(handle, "{}", self.colorize.region(style, text),)?;
