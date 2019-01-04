@@ -17,24 +17,16 @@ pub fn as_terminal_escaped(
     style: highlighting::Style,
     text: &str,
     true_color: bool,
-    colored: bool,
     italics: bool,
 ) -> String {
-    let style = if !colored {
-        Style::default()
-    } else {
-        let color = to_ansi_color(style.foreground, true_color);
-
-        if style.font_style.contains(FontStyle::BOLD) {
-            color.bold()
-        } else if style.font_style.contains(FontStyle::UNDERLINE) {
-            color.underline()
-        } else if italics && style.font_style.contains(FontStyle::ITALIC) {
-            color.italic()
-        } else {
-            color.normal()
-        }
+    let font_style = style.font_style;
+    let ansi_style = Style {
+        foreground: Some(to_ansi_color(style.foreground, true_color)),
+        is_bold: font_style.contains(FontStyle::BOLD),
+        is_underline: font_style.contains(FontStyle::UNDERLINE),
+        is_italic: italics && font_style.contains(FontStyle::ITALIC),
+        ..Style::default()
     };
 
-    style.paint(text).to_string()
+    ansi_style.paint(text).to_string()
 }

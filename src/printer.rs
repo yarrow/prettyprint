@@ -144,14 +144,32 @@ fn large_line_numbers_modify_the_frame() {
     assert_eq!(actual, expected);
 }
 
-struct Colorize {
+trait Colorize {
+    fn filename(&self, name: &str) -> String;
+    fn gutter(&self, gutter_text: &str) -> String;
+    fn region(&self, style: highlighting::Style, text: &str) -> String;
+}
+
+fn new_colorize(colors: Option<Colors>, true_color: bool, use_italic_text: bool)
+    -> Box<dyn Colorize>
+{
+    match colors {
+        None => Box::new(ColorizeNone()),
+        Some(colors) => Box::new(ColorizeANSI {
+            colors,
+            true_color,
+            use_italic_text,
+        })
+    }
+}
+
+struct ColorizeANSI {
     colors: Colors,
-    colored_output: bool,
     true_color: bool,
     use_italic_text: bool,
 }
 
-impl Colorize {
+impl Colorize for ColorizeANSI {
     fn filename(&self, name: &str) -> String {
         self.colors.filename.paint(name).to_string()
     }
@@ -165,14 +183,28 @@ impl Colorize {
             style,
             text.as_ref(),
             self.true_color,
-            self.colored_output,
             self.use_italic_text,
         )
     }
 }
 
+struct ColorizeNone ();
+impl Colorize for ColorizeNone {
+    fn filename(&self, name: &str) -> String {
+        name.to_string()
+    }
+
+    fn gutter(&self, gutter_text: &str) -> String {
+        gutter_text.to_string()
+    }
+
+    fn region(&self, _style: highlighting::Style, text: &str) -> String {
+        text.to_string()
+    }
+}
+
 pub struct InteractivePrinter<'a> {
-    colorize: Colorize,
+    colorize: Box<dyn Colorize>,
     frame: Frame,
     content_type: ContentType,
     highlighter: Option<HighlightLines<'a>>,
@@ -234,16 +266,12 @@ impl<'a> InteractivePrinter<'a> {
         output_wrap: OutputWrap,
         use_italic_text: bool,
     ) -> Self {
-        let colorize = Colorize {
-            colors: if colored_output {
-                Colors::colored(theme, true_color)
-            } else {
-                Colors::plain()
-            },
-            colored_output,
-            true_color,
-            use_italic_text,
+        let colors = if colored_output {
+            Some(Colors::colored(theme, true_color))
+        } else {
+            None
         };
+        let colorize = new_colorize(colors, true_color, use_italic_text);
 
         let frame = Frame::new(
             term_width,
@@ -467,10 +495,6 @@ pub struct Colors {
 }
 
 impl Colors {
-    fn plain() -> Self {
-        Colors::default()
-    }
-
     pub fn colored(theme: &Theme, true_color: bool) -> Self {
         let gutter_color = theme
             .settings
