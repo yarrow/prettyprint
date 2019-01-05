@@ -1,12 +1,10 @@
 use std::io::Write;
 
-use ansi_term::Colour::Fixed;
-use ansi_term::Style;
 use style::OutputComponents;
 use syntax_mapping::SyntaxMapping;
 
 use syntect::easy::HighlightLines;
-use syntect::highlighting::{self, Theme};
+use syntect::highlighting::Theme;
 use syntect::parsing::{SyntaxReference, SyntaxSet};
 
 use unicode_width::UnicodeWidthStr;
@@ -17,11 +15,12 @@ use encoding::all::{UTF_16BE, UTF_16LE};
 use encoding::{DecoderTrap, Encoding};
 
 use assets::HighlightingAssets;
+use colorize::{new_colorize, Colorize};
 use errors::*;
+use frame::Frame;
 use inputfile::{InputFile, InputFileReader};
 use preprocessor::{expand_tabs, replace_nonprintable};
 use style::OutputWrap;
-use terminal::{as_terminal_escaped, to_ansi_color};
 
 pub trait Printer {
     fn print_header(
@@ -38,169 +37,6 @@ pub trait Printer {
         line_number: usize,
         line_buffer: &[u8],
     ) -> Result<()>;
-}
-
-pub struct Frame {
-    gutter: Option<&'static str>,
-    term_width: usize,
-    line_number_width: usize,
-}
-
-const LNUM_DIGITS: usize = 4;
-
-impl Frame {
-    fn new(term_width: usize, numbers: bool, grid: bool) -> Self {
-        let separator = if grid { " │ " } else { " " };
-        let term_width_needed = LNUM_DIGITS + separator.len() + 5;
-        let (gutter, line_number_width) = if numbers && term_width >= term_width_needed {
-            (Some(separator), LNUM_DIGITS)
-        } else {
-            (None, 0)
-        };
-
-        Frame {
-            gutter,
-            term_width,
-            line_number_width,
-        }
-    }
-
-    fn horizontal_line(&self, grid_char: char) -> String {
-        fn hchars(n: usize) -> String {
-            "─".repeat(n)
-        }
-
-        if self.line_number_width == 0 {
-            hchars(self.term_width)
-        } else {
-            const GRID_CHAR_WIDTH: usize = 1;
-            let prefix_width = self.line_number_width + 1; // Line number and a space character
-            let suffix_width = self.term_width - prefix_width - GRID_CHAR_WIDTH;
-            format!(
-                "{}{}{}",
-                hchars(prefix_width),
-                grid_char,
-                hchars(suffix_width)
-            )
-        }
-    }
-
-    fn numbered_gutter(&mut self, line_number: usize) -> Option<String> {
-        self.gutter.map(|separator| {
-            let n = format!("{:4}", line_number);
-            self.line_number_width = n.len();
-            n + separator
-        })
-    }
-
-    fn blank_gutter(&self) -> Option<String> {
-        self.gutter
-            .map(|separator| " ".repeat(self.line_number_width) + separator)
-    }
-}
-
-#[test]
-fn large_line_numbers_modify_the_frame() {
-    const CHECK: char = '✔';
-    const CHAR_LEN: usize = 3; // UTF8 length of the "─" chars in `horizontal_line`'s output
-
-    let mut frame = Frame::new(20, true, true);
-
-    // Set normal_check to the position of the vertical-bar intersection point of a horizontal
-    // line, before we print large numbers
-    let header = frame.horizontal_line(CHECK);
-    let header_check = header.find(CHECK).unwrap();
-
-    // Normal number
-    let small_number = frame.numbered_gutter(9999).unwrap();
-    let small_blank = frame.blank_gutter().unwrap();
-    assert_eq!(small_number.len(), small_blank.len());
-
-    // Five-digit number
-    let large_number = frame.numbered_gutter(10000).unwrap();
-    let large_blank = frame.blank_gutter().unwrap();
-    assert_eq!(large_number.len(), large_blank.len());
-    assert_ne!(small_number.len(), large_number.len());
-
-    // Set footer_check to the position of the vertical-bar intersection point of a horizontal
-    // line after we print large numbers
-    let footer = frame.horizontal_line(CHECK);
-    let footer_check = footer.find(CHECK).unwrap();
-
-    assert_eq!(header_check + CHAR_LEN, footer_check);
-
-    let actual = format!(
-        "*\n{}*\n{}*\n{}*\n{}*\n{}*\n{}*\n*",
-        header, small_number, small_blank, large_number, large_blank, footer
-    );
-    let expected = "*
-─────✔──────────────*
-9999 │ *
-     │ *
-10000 │ *
-      │ *
-──────✔─────────────*
-*";
-    assert_eq!(actual, expected);
-}
-
-trait Colorize {
-    fn filename(&self, name: &str) -> String;
-    fn gutter(&self, gutter_text: &str) -> String;
-    fn region(&self, style: highlighting::Style, text: &str) -> String;
-}
-
-fn new_colorize(colors: Option<Colors>, true_color: bool, use_italic_text: bool)
-    -> Box<dyn Colorize>
-{
-    match colors {
-        None => Box::new(ColorizeNone()),
-        Some(colors) => Box::new(ColorizeANSI {
-            colors,
-            true_color,
-            use_italic_text,
-        })
-    }
-}
-
-struct ColorizeANSI {
-    colors: Colors,
-    true_color: bool,
-    use_italic_text: bool,
-}
-
-impl Colorize for ColorizeANSI {
-    fn filename(&self, name: &str) -> String {
-        self.colors.filename.paint(name).to_string()
-    }
-
-    fn gutter(&self, gutter_text: &str) -> String {
-        self.colors.grid.paint(gutter_text).to_string()
-    }
-
-    fn region(&self, style: highlighting::Style, text: &str) -> String {
-        as_terminal_escaped(
-            style,
-            text.as_ref(),
-            self.true_color,
-            self.use_italic_text,
-        )
-    }
-}
-
-struct ColorizeNone ();
-impl Colorize for ColorizeNone {
-    fn filename(&self, name: &str) -> String {
-        name.to_string()
-    }
-
-    fn gutter(&self, gutter_text: &str) -> String {
-        gutter_text.to_string()
-    }
-
-    fn region(&self, _style: highlighting::Style, text: &str) -> String {
-        text.to_string()
-    }
 }
 
 pub struct InteractivePrinter<'a> {
@@ -266,12 +102,7 @@ impl<'a> InteractivePrinter<'a> {
         output_wrap: OutputWrap,
         use_italic_text: bool,
     ) -> Self {
-        let colors = if colored_output {
-            Some(Colors::colored(theme, true_color))
-        } else {
-            None
-        };
-        let colorize = new_colorize(colors, true_color, use_italic_text);
+        let colorize = new_colorize(theme, colored_output, true_color, use_italic_text);
 
         let frame = Frame::new(
             term_width,
@@ -483,28 +314,5 @@ impl<'a> Printer for InteractivePrinter<'a> {
         }
 
         Ok(())
-    }
-}
-
-const DEFAULT_GUTTER_COLOR: u8 = 238;
-
-#[derive(Default)]
-pub struct Colors {
-    pub grid: Style,
-    pub filename: Style,
-}
-
-impl Colors {
-    pub fn colored(theme: &Theme, true_color: bool) -> Self {
-        let gutter_color = theme
-            .settings
-            .gutter_foreground
-            .map(|c| to_ansi_color(c, true_color))
-            .unwrap_or(Fixed(DEFAULT_GUTTER_COLOR));
-
-        Colors {
-            grid: gutter_color.normal(),
-            filename: Style::new().bold(),
-        }
     }
 }

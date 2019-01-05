@@ -31,7 +31,9 @@ extern crate unicode_width;
 
 mod assets;
 mod builder;
+mod colorize;
 mod dirs;
+mod frame;
 mod inputfile;
 mod line_range;
 mod output;
