@@ -41,7 +41,6 @@ mod preprocessor;
 mod printer;
 mod style;
 mod syntax_mapping;
-mod terminal;
 
 #[cfg(test)]
 mod test_ansi_code_preservation;

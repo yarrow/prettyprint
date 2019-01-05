@@ -1,6 +1,5 @@
 use ansi_term as ansi;
-use syntect::highlighting::{self, Theme};
-use terminal::{as_terminal_escaped, to_ansi_color};
+use syntect::highlighting::{self, FontStyle, Theme};
 
 pub(crate) trait Colorize {
     fn filename(&self, name: &str) -> String;
@@ -33,6 +32,14 @@ pub(crate) struct Colors {
     pub filename: ansi::Style,
 }
 
+fn to_ansi_color(color: highlighting::Color, true_color: bool) -> ansi_term::Colour {
+    if true_color {
+        ansi::Color::RGB(color.r, color.g, color.b)
+    } else {
+        ansi::Color::Fixed(ansi_colours::ansi256_from_rgb((color.r, color.g, color.b)))
+    }
+}
+
 impl ColorizeANSI {
     fn new(theme: &Theme, true_color: bool, use_italic_text: bool) -> Self {
         let gutter_color = theme
@@ -62,7 +69,16 @@ impl Colorize for ColorizeANSI {
     }
 
     fn region(&self, style: highlighting::Style, text: &str) -> String {
-        as_terminal_escaped(style, text.as_ref(), self.true_color, self.use_italic_text)
+        let font_style = style.font_style;
+        let ansi_style = ansi::Style {
+            foreground: Some(to_ansi_color(style.foreground, self.true_color)),
+            is_bold: font_style.contains(FontStyle::BOLD),
+            is_underline: font_style.contains(FontStyle::UNDERLINE),
+            is_italic: self.use_italic_text && font_style.contains(FontStyle::ITALIC),
+            ..ansi::Style::default()
+        };
+
+        ansi_style.paint(text).to_string()
     }
 }
 
