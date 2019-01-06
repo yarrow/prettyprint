@@ -102,7 +102,8 @@ impl<'a> InteractivePrinter<'a> {
         output_wrap: OutputWrap,
         use_italic_text: bool,
     ) -> Self {
-        let colorize = new_colorize(theme, colored_output, true_color, use_italic_text);
+        let theme_gutter = theme.settings.gutter_foreground;
+        let colorize = new_colorize(theme_gutter, colored_output, true_color, use_italic_text);
 
         let frame = Frame::new(
             term_width,
