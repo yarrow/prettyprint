@@ -94,3 +94,96 @@ impl Colorize for ColorizeNone {
         text.to_string()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use self::sublime::{Color, FontStyle, Style};
+    use super::*;
+    fn black_text() -> Style {
+        Style {
+            foreground: Color::BLACK,
+            background: Color::WHITE,
+            font_style: FontStyle::empty(),
+        }
+    }
+    fn red_text() -> Style {
+        const RED: Color = Color {
+            r: 255,
+            ..Color::BLACK
+        };
+        Style {
+            foreground: RED,
+            background: Color::WHITE,
+            font_style: FontStyle::empty(),
+        }
+    }
+    #[test]
+    fn test_plain() {
+        let colorize = ColorizeNone();
+        let original = "abc\nefg\n";
+        assert_eq!(colorize.filename(original), original);
+        assert_eq!(colorize.gutter(original), original);
+        assert_eq!(colorize.region(red_text(), original), original);
+        assert_eq!(colorize.region(black_text(), original), original);
+    }
+    #[test]
+    fn colorize_none_when_colored_output_is_false() {
+        let colorize = new_colorize(None, false, true, true);
+        let original = "abc\nefg\n";
+        assert_eq!(colorize.region(red_text(), original), original);
+    }
+
+    // The following is inaccurate for ANSI codes where one of the red, green, or blue values is
+    // 1, 3, or 4 — it will mistake those for bold, italic or underlines font styles respectively.
+    fn font_style_of(text: &str) -> FontStyle {
+        // CSI: Control Sequence Introducer — ESC [
+        // SGR: Select graphic rendition: a series of integer literals followed by 'm'
+        assert!(
+            &text[0..2] == "\u{1b}[",
+            "Text doesn't begin with ANS CSI: {:?}",
+            text
+        );
+        let mut font_style = FontStyle::empty();
+        let sgr = match text.find('m') {
+            None => panic!("Didn't find end of SGR in text: {:?}", text),
+            Some(n) => text[2..n].split(";").fuse(),
+        };
+        for p in sgr {
+            match p {
+                "1" => font_style.insert(FontStyle::BOLD),
+                "3" => font_style.insert(FontStyle::ITALIC),
+                "4" => font_style.insert(FontStyle::UNDERLINE),
+                _ => {}
+            }
+        }
+        font_style
+    }
+
+    #[test]
+    fn colorize_ansi_uses_italic_font_style_only_when_use_italic_text_is_true() {
+        let mut bold_italic = FontStyle::ITALIC;
+        bold_italic.insert(FontStyle::BOLD);
+        let text = "Text";
+        let style = Style {
+            font_style: bold_italic,
+            ..Style::default()
+        };
+        let without_italic = new_colorize(None, true, false, false).region(style, text);
+        let with_italic = new_colorize(None, true, false, true).region(style, text);
+        assert_eq!(font_style_of(&without_italic), FontStyle::BOLD);
+        assert_eq!(font_style_of(&with_italic), bold_italic);
+    }
+
+    #[test]
+    fn colorize_ansi_uses_256_color_mode_when_true_color_is_false() {
+        let text = "Text";
+        let c_24k = new_colorize(None, true, true, false).region(red_text(), text);
+        let c_256 = new_colorize(None, true, false, false).region(red_text(), text);
+        const RED_24K: &str = "38;2;255;0;0";
+        const RED_256: &str = "38;5;196";
+        assert!(c_24k.contains(RED_24K));
+        assert!(!c_24k.contains(RED_256));
+        assert!(c_256.contains(RED_256));
+        assert!(!c_256.contains(RED_24K));
+    }
+}
