@@ -7,8 +7,6 @@ use syntect::easy::HighlightLines;
 use syntect::highlighting::Theme;
 use syntect::parsing::{SyntaxReference, SyntaxSet};
 
-use unicode_width::UnicodeWidthStr;
-
 use content_inspector::ContentType;
 
 use encoding::all::{UTF_16BE, UTF_16LE};
@@ -46,7 +44,6 @@ pub struct InteractivePrinter<'a> {
     highlighter: Option<HighlightLines<'a>>,
     syntax_set: &'a SyntaxSet,
     output_components: OutputComponents,
-    term_width: usize,
     tab_width: usize,
     show_nonprintable: bool,
     output_wrap: OutputWrap,
@@ -125,7 +122,6 @@ impl<'a> InteractivePrinter<'a> {
             highlighter,
             syntax_set,
             output_components,
-            term_width,
             tab_width,
             show_nonprintable,
             output_wrap,
@@ -247,15 +243,14 @@ impl<'a> Printer for InteractivePrinter<'a> {
             return Ok(());
         }
 
+        let cursor_max: usize = self.frame.cursor_max();
         let mut cursor: usize = 0;
-        let mut cursor_max: usize = self.term_width;
         let mut cursor_total: usize = 0;
         let mut panel_wrap = "".to_string();
 
         // Frame gutter
         if let Some(gutter_text) = self.frame.numbered_gutter(line_number) {
             write!(handle, "{}", self.colorize.gutter(&gutter_text))?;
-            cursor_max -= UnicodeWidthStr::width(&gutter_text[..]);
         }
 
         // Line contents.

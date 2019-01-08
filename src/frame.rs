@@ -2,24 +2,27 @@ pub(crate) struct Frame {
     gutter: Option<&'static str>,
     term_width: usize,
     line_number_width: usize,
+    separator_width: usize,
 }
 
 const LNUM_DIGITS: usize = 4;
 
 impl Frame {
     pub(crate) fn new(term_width: usize, numbers: bool, grid: bool) -> Self {
-        let separator = if grid { " │ " } else { " " };
-        let term_width_needed = LNUM_DIGITS + separator.len() + 5;
-        let (gutter, line_number_width) = if numbers && term_width >= term_width_needed {
-            (Some(separator), LNUM_DIGITS)
-        } else {
-            (None, 0)
-        };
+        let (separator, separator_width) = if grid { (" │ ", 3) } else { (" ", 1) };
+        let term_width_needed = LNUM_DIGITS + separator_width + 5;
+        let (gutter, line_number_width, separator_width) = 
+            if numbers && term_width >= term_width_needed {
+                (Some(separator), LNUM_DIGITS, separator_width)
+            } else {
+                (None, 0, 0)
+            };
 
         Frame {
             gutter,
             term_width,
             line_number_width,
+            separator_width,
         }
     }
 
@@ -55,6 +58,19 @@ impl Frame {
         self.gutter
             .map(|separator| " ".repeat(self.line_number_width) + separator)
     }
+
+    pub(crate) fn cursor_max(&self) -> usize {
+        self.term_width - (self.line_number_width + self.separator_width)
+    }
+}
+
+#[test]
+fn gutter_prints_if_term_width_is_at_least_12() {
+    let mut frame = Frame::new(12, true, true);
+    assert!(frame.numbered_gutter(9999).is_some());
+
+    let mut frame = Frame::new(11, true, true);
+    assert!(frame.numbered_gutter(9999).is_none());
 }
 
 #[test]

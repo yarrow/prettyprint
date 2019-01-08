@@ -27,7 +27,6 @@ extern crate directories;
 extern crate encoding;
 extern crate shell_words;
 extern crate syntect;
-extern crate unicode_width;
 
 mod assets;
 mod builder;
