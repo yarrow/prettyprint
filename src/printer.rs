@@ -13,7 +13,7 @@ use encoding::all::{UTF_16BE, UTF_16LE};
 use encoding::{DecoderTrap, Encoding};
 
 use assets::HighlightingAssets;
-use colorize::{new_colorize, Colorize};
+use colorize::{new_colorize, Colorize, ColorizeTo};
 use errors::*;
 use frame::Frame;
 use inputfile::{InputFile, InputFileReader};
@@ -99,8 +99,20 @@ impl<'a> InteractivePrinter<'a> {
         output_wrap: OutputWrap,
         use_italic_text: bool,
     ) -> Self {
-        let theme_gutter = theme.settings.gutter_foreground;
-        let colorize = new_colorize(theme_gutter, colored_output, true_color, use_italic_text);
+        let colorize = new_colorize({
+            let theme_gutter = theme.settings.gutter_foreground;
+            if !colored_output {
+                ColorizeTo::Plain
+            } else if false {
+                ColorizeTo::Html { theme_gutter }
+            } else {
+                ColorizeTo::Terminal {
+                    theme_gutter,
+                    true_color,
+                    use_italic_text,
+                }
+            }
+        });
 
         let frame = Frame::new(
             term_width,

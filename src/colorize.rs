@@ -1,21 +1,34 @@
 use ansi_term as ansi;
 use syntect::highlighting as sublime;
 
+pub(crate) enum ColorizeTo {
+    Plain,
+    Html {
+        theme_gutter: Option<sublime::Color>,
+    },
+    Terminal {
+        theme_gutter: Option<sublime::Color>,
+        true_color: bool,
+        use_italic_text: bool,
+    },
+}
+
 pub(crate) trait Colorize {
     fn filename(&self, name: &str) -> String;
     fn gutter(&self, gutter_text: &str) -> String;
     fn region(&self, style: sublime::Style, text: &str) -> String;
 }
 
-pub(crate) fn new_colorize(
-    theme_gutter: Option<sublime::Color>,
-    colored_output: bool,
-    true_color: bool,
-    use_italic_text: bool,
-) -> Box<dyn Colorize> {
-    match colored_output {
-        false => Box::new(ColorizeNone()),
-        true => Box::new(ColorizeANSI::new(theme_gutter, true_color, use_italic_text)),
+pub(crate) fn new_colorize(colorize_to: ColorizeTo) -> Box<dyn Colorize> {
+    use self::ColorizeTo::*;
+    match colorize_to {
+        Plain => Box::new(ColorizeNone()),
+        Html { theme_gutter: _ } => unimplemented!(),
+        Terminal {
+            theme_gutter,
+            true_color,
+            use_italic_text,
+        } => Box::new(ColorizeANSI::new(theme_gutter, true_color, use_italic_text)),
     }
 }
 
@@ -99,6 +112,7 @@ impl Colorize for ColorizeNone {
 mod test {
     use self::sublime::{Color, FontStyle, Style};
     use super::*;
+
     fn black_text() -> Style {
         Style {
             foreground: Color::BLACK,
@@ -128,7 +142,7 @@ mod test {
     }
     #[test]
     fn colorize_none_when_colored_output_is_false() {
-        let colorize = new_colorize(None, false, true, true);
+        let colorize = new_colorize(ColorizeTo::Plain);
         let original = "abc\nefg\n";
         assert_eq!(colorize.region(red_text(), original), original);
     }
@@ -159,6 +173,14 @@ mod test {
         font_style
     }
 
+    fn terminal(true_color: bool, use_italic_text: bool) -> Box<dyn Colorize> {
+        new_colorize(ColorizeTo::Terminal {
+            theme_gutter: None,
+            true_color,
+            use_italic_text,
+        })
+    }
+
     #[test]
     fn colorize_ansi_uses_italic_font_style_only_when_use_italic_text_is_true() {
         let mut bold_italic = FontStyle::ITALIC;
@@ -168,8 +190,8 @@ mod test {
             font_style: bold_italic,
             ..Style::default()
         };
-        let without_italic = new_colorize(None, true, false, false).region(style, text);
-        let with_italic = new_colorize(None, true, false, true).region(style, text);
+        let without_italic = terminal(false, false).region(style, text);
+        let with_italic = terminal(false, true).region(style, text);
         assert_eq!(font_style_of(&without_italic), FontStyle::BOLD);
         assert_eq!(font_style_of(&with_italic), bold_italic);
     }
@@ -177,8 +199,8 @@ mod test {
     #[test]
     fn colorize_ansi_uses_256_color_mode_when_true_color_is_false() {
         let text = "Text";
-        let c_24k = new_colorize(None, true, true, false).region(red_text(), text);
-        let c_256 = new_colorize(None, true, false, false).region(red_text(), text);
+        let c_24k = terminal(true, false).region(red_text(), text);
+        let c_256 = terminal(false, false).region(red_text(), text);
         const RED_24K: &str = "38;2;255;0;0";
         const RED_256: &str = "38;5;196";
         assert!(c_24k.contains(RED_24K));
