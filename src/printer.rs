@@ -13,7 +13,7 @@ use encoding::all::{UTF_16BE, UTF_16LE};
 use encoding::{DecoderTrap, Encoding};
 
 use assets::HighlightingAssets;
-use colorize::{new_colorize, Colorize, ColorizeTo};
+use colorize::{make_gutter_color, new_colorize, Colorize, ColorizeTo};
 use errors::*;
 use frame::Frame;
 use inputfile::{InputFile, InputFileReader};
@@ -100,14 +100,14 @@ impl<'a> InteractivePrinter<'a> {
         use_italic_text: bool,
     ) -> Self {
         let colorize = new_colorize({
-            let theme_gutter = theme.settings.gutter_foreground;
+            let gutter_color = make_gutter_color(theme.settings.gutter_foreground);
             if !colored_output {
                 ColorizeTo::Plain
             } else if false {
-                ColorizeTo::Html { theme_gutter }
+                ColorizeTo::Html { gutter_color }
             } else {
                 ColorizeTo::Terminal {
-                    theme_gutter,
+                    gutter_color,
                     true_color,
                     use_italic_text,
                 }

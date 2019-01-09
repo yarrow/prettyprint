@@ -4,10 +4,10 @@ use syntect::highlighting as sublime;
 pub(crate) enum ColorizeTo {
     Plain,
     Html {
-        theme_gutter: Option<sublime::Color>,
+        gutter_color: sublime::Color,
     },
     Terminal {
-        theme_gutter: Option<sublime::Color>,
+        gutter_color: sublime::Color,
         true_color: bool,
         use_italic_text: bool,
     },
@@ -23,12 +23,37 @@ pub(crate) fn new_colorize(colorize_to: ColorizeTo) -> Box<dyn Colorize> {
     use self::ColorizeTo::*;
     match colorize_to {
         Plain => Box::new(ColorizeNone()),
-        Html { theme_gutter: _ } => unimplemented!(),
+        Html { gutter_color: _ } => unimplemented!(),
         Terminal {
-            theme_gutter,
+            gutter_color,
             true_color,
             use_italic_text,
-        } => Box::new(ColorizeANSI::new(theme_gutter, true_color, use_italic_text)),
+        } => Box::new(ColorizeANSI::new(gutter_color, true_color, use_italic_text)),
+    }
+}
+
+// Two ways of specifying a particular shade of gray.
+const SUBLIME_DEFAULT_GUTTER_COLOR: sublime::Color = sublime::Color {
+    r: 68,
+    g: 68,
+    b: 68,
+    a: 255,
+};
+const ANSI_DEFAULT_GUTTER_COLOR: ansi::Color = ansi::Color::Fixed(238u8);
+
+pub(crate) fn make_gutter_color(c: Option<sublime::Color>) -> sublime::Color {
+    c.unwrap_or(SUBLIME_DEFAULT_GUTTER_COLOR)
+}
+
+fn to_ansi_color(color: sublime::Color, true_color: bool) -> ansi_term::Colour {
+    // TODO: Remove the first arm once we no longer need to exactly agree with
+    // the original ANSI coloring. Or else check for every fixed-color ANSI encoding.
+    if color == SUBLIME_DEFAULT_GUTTER_COLOR {
+        ANSI_DEFAULT_GUTTER_COLOR
+    } else if true_color {
+        ansi::Color::RGB(color.r, color.g, color.b)
+    } else {
+        ansi::Color::Fixed(ansi_colours::ansi256_from_rgb((color.r, color.g, color.b)))
     }
 }
 
@@ -38,28 +63,15 @@ struct ColorizeANSI {
     use_italic_text: bool,
 }
 
-const DEFAULT_GUTTER_COLOR: u8 = 238;
-
 pub(crate) struct Colors {
     pub grid: ansi::Style,
     pub filename: ansi::Style,
 }
 
-fn to_ansi_color(color: sublime::Color, true_color: bool) -> ansi_term::Colour {
-    if true_color {
-        ansi::Color::RGB(color.r, color.g, color.b)
-    } else {
-        ansi::Color::Fixed(ansi_colours::ansi256_from_rgb((color.r, color.g, color.b)))
-    }
-}
-
 impl ColorizeANSI {
-    fn new(theme_gutter: Option<sublime::Color>, true_color: bool, use_italic_text: bool) -> Self {
-        let gutter_color = theme_gutter
-            .map(|c| to_ansi_color(c, true_color))
-            .unwrap_or(ansi::Color::Fixed(DEFAULT_GUTTER_COLOR));
+    fn new(gutter_color: sublime::Color, true_color: bool, use_italic_text: bool) -> Self {
         let colors = Colors {
-            grid: gutter_color.normal(),
+            grid: to_ansi_color(gutter_color, true_color).normal(),
             filename: ansi::Style::new().bold(),
         };
         ColorizeANSI {
@@ -175,7 +187,7 @@ mod test {
 
     fn terminal(true_color: bool, use_italic_text: bool) -> Box<dyn Colorize> {
         new_colorize(ColorizeTo::Terminal {
-            theme_gutter: None,
+            gutter_color: SUBLIME_DEFAULT_GUTTER_COLOR,
             true_color,
             use_italic_text,
         })
