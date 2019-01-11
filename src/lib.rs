@@ -1,7 +1,22 @@
 #![cfg_attr(debug_assertions, allow(dead_code, unused_imports))]
 #![deny(unused_must_use)]
-#![cfg_attr(feature = "cargo-clippy", deny(clippy))]
-#![cfg_attr(feature = "cargo-clippy", warn(clippy_pedantic))]
+#![deny(clippy::all)]
+#![warn(clippy::pedantic)]
+#![allow(clippy::stutter)]
+#![allow(clippy::similar_names)]
+#![allow(clippy::let_and_return)]
+#![allow(clippy::pub_enum_variant_names)]
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::use_self)]
+#![allow(clippy::single_match_else)]
+#![allow(clippy::default_trait_access)]
+#![allow(clippy::result_map_unwrap_or_else)]
+#![allow(clippy::non_ascii_literal)]
+
+#![allow(clippy::needless_pass_by_value)]
+#![allow(clippy::extra_unused_lifetimes)]
+#![allow(clippy::or_fun_call)]
+
 //#![warn(missing_docs)]
 
 // `error_chain!` can recurse deeply

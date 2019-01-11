@@ -50,6 +50,8 @@ pub struct InteractivePrinter<'a> {
 }
 
 impl<'a> InteractivePrinter<'a> {
+    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::needless_pass_by_value)]
     pub fn new(
         assets: &'a HighlightingAssets,
         file: &InputFile,
@@ -85,6 +87,7 @@ impl<'a> InteractivePrinter<'a> {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new2(
         theme: &'a Theme,
         syntax: &'a SyntaxReference,
@@ -234,15 +237,15 @@ impl<'a> Printer for InteractivePrinter<'a> {
             }
             ContentType::UTF_16LE => UTF_16LE
                 .decode(&line_buffer, DecoderTrap::Strict)
-                .unwrap_or("Invalid UTF-16LE".into()),
+                .unwrap_or_else(|_| "Invalid UTF-16LE".into()),
             ContentType::UTF_16BE => UTF_16BE
                 .decode(&line_buffer, DecoderTrap::Strict)
-                .unwrap_or("Invalid UTF-16BE".into()),
+                .unwrap_or_else(|_| "Invalid UTF-16BE".into()),
             _ => String::from_utf8_lossy(&line_buffer).to_string(),
         };
 
         if self.show_nonprintable {
-            line = replace_nonprintable(&mut line, self.tab_width);
+            line = replace_nonprintable(&line, self.tab_width);
         }
 
         let regions = if let Some(ref mut highlighter) = self.highlighter {
@@ -267,16 +270,16 @@ impl<'a> Printer for InteractivePrinter<'a> {
 
         // Line contents.
         if self.output_wrap == OutputWrap::None {
-            for &(style, region) in regions.iter() {
+            for (style, region) in regions {
                 let text = self.preprocess(region, &mut cursor_total);
                 write!(handle, "{}", self.colorize.region(style, &text),)?;
             }
 
             if line.bytes().next_back() != Some(b'\n') {
-                write!(handle, "\n")?;
+                writeln!(handle)?;
             }
         } else {
-            for &(style, region) in regions.iter() {
+            for (style, region) in regions {
                 let text = self.preprocess(
                     region.trim_right_matches(|c| c == '\r' || c == '\n'),
                     &mut cursor_total,
@@ -318,7 +321,7 @@ impl<'a> Printer for InteractivePrinter<'a> {
                 }
             }
 
-            write!(handle, "\n")?;
+            writeln!(handle)?;
         }
 
         Ok(())

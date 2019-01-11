@@ -1,6 +1,7 @@
 use ansi_term as ansi;
 use syntect::highlighting as sublime;
 
+#[derive(Clone, Copy)]
 pub(crate) enum ColorizeTo {
     Plain,
     Html {
@@ -23,7 +24,7 @@ pub(crate) fn new_colorize(colorize_to: ColorizeTo) -> Box<dyn Colorize> {
     use self::ColorizeTo::*;
     match colorize_to {
         Plain => Box::new(ColorizeNone()),
-        Html { gutter_color: _ } => unimplemented!(),
+        Html { .. } => unimplemented!(),
         Terminal {
             gutter_color,
             true_color,
@@ -39,7 +40,7 @@ const SUBLIME_DEFAULT_GUTTER_COLOR: sublime::Color = sublime::Color {
     b: 68,
     a: 255,
 };
-const ANSI_DEFAULT_GUTTER_COLOR: ansi::Color = ansi::Color::Fixed(238u8);
+const ANSI_DEFAULT_GUTTER_COLOR: ansi::Color = ansi::Color::Fixed(238_u8);
 
 pub(crate) fn make_gutter_color(c: Option<sublime::Color>) -> sublime::Color {
     c.unwrap_or(SUBLIME_DEFAULT_GUTTER_COLOR)
@@ -74,7 +75,7 @@ impl ColorizeANSI {
             grid: to_ansi_color(gutter_color, true_color).normal(),
             filename: ansi::Style::new().bold(),
         };
-        ColorizeANSI {
+        Self {
             colors,
             true_color,
             use_italic_text,
@@ -210,11 +211,11 @@ mod test {
 
     #[test]
     fn colorize_ansi_uses_256_color_mode_when_true_color_is_false() {
-        let text = "Text";
-        let c_24k = terminal(true, false).region(red_text(), text);
-        let c_256 = terminal(false, false).region(red_text(), text);
         const RED_24K: &str = "38;2;255;0;0";
         const RED_256: &str = "38;5;196";
+        const TEXT: &str = "Text";
+        let c_24k = terminal(true, false).region(red_text(), TEXT);
+        let c_256 = terminal(false, false).region(red_text(), TEXT);
         assert!(c_24k.contains(RED_24K));
         assert!(!c_24k.contains(RED_256));
         assert!(c_256.contains(RED_256));

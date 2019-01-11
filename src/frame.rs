@@ -1,3 +1,4 @@
+#![allow(clippy::non_ascii_literal)]
 pub(crate) struct Frame {
     gutter: Option<&'static str>,
     term_width: usize,
@@ -18,7 +19,7 @@ impl Frame {
                 (None, 0, 0)
             };
 
-        Frame {
+        Self {
             gutter,
             term_width,
             line_number_width,
