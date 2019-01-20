@@ -82,7 +82,8 @@ mod tests {
     /// Pretty prints its own code
     #[test]
     fn it_works() {
-        let printer = PrettyPrinter::default().build().unwrap();
+        // PagingMode::Never because otherwise `cargo watch -x test` hangs.
+        let printer = PrettyPrinter::default().paging_mode(PagingMode::Never).build().unwrap();
         printer.file("fixtures/fib.rs").unwrap();
     }
 
