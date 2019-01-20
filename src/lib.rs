@@ -2,21 +2,30 @@
 #![deny(unused_must_use)]
 #![deny(clippy::all)]
 #![warn(clippy::pedantic)]
-#![allow(clippy::stutter)]
-#![allow(clippy::similar_names)]
+#![allow(clippy::if_not_else)]
+//
+// Clippy complains about lints in some files we don't currently need to touch.
+// Allow those items until we change the affected files for other reasons, at
+// which point we can address the lint, or move the `allow` to the affected
+// file(s), or affirmatively decide to allow them globally.
+//
 #![allow(clippy::let_and_return)]
-#![allow(clippy::pub_enum_variant_names)]
 #![allow(clippy::collapsible_if)]
+#![allow(clippy::extra_unused_lifetimes)]
+#![allow(clippy::needless_pass_by_value)]
+#![allow(clippy::or_fun_call)]
+//
+// These lints are from clippy::pedantic.  Perhaps more likely to be allowed
+// globally.
+//
+#![allow(clippy::similar_names)]
+#![allow(clippy::stutter)]
+#![allow(clippy::pub_enum_variant_names)]
 #![allow(clippy::use_self)]
 #![allow(clippy::single_match_else)]
 #![allow(clippy::default_trait_access)]
 #![allow(clippy::result_map_unwrap_or_else)]
 #![allow(clippy::non_ascii_literal)]
-
-#![allow(clippy::needless_pass_by_value)]
-#![allow(clippy::extra_unused_lifetimes)]
-#![allow(clippy::or_fun_call)]
-
 //#![warn(missing_docs)]
 
 // `error_chain!` can recurse deeply
@@ -83,7 +92,10 @@ mod tests {
     #[test]
     fn it_works() {
         // PagingMode::Never because otherwise `cargo watch -x test` hangs.
-        let printer = PrettyPrinter::default().paging_mode(PagingMode::Never).build().unwrap();
+        let printer = PrettyPrinter::default()
+            .paging_mode(PagingMode::Never)
+            .build()
+            .unwrap();
         printer.file("fixtures/fib.rs").unwrap();
     }
 

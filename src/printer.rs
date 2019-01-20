@@ -13,7 +13,7 @@ use encoding::all::{UTF_16BE, UTF_16LE};
 use encoding::{DecoderTrap, Encoding};
 
 use assets::HighlightingAssets;
-use colorize::{make_gutter_color, new_colorize, Colorize, ColorizeTo};
+use colorize::{new_colorize, Colorize};
 use errors::*;
 use frame::Frame;
 use inputfile::{InputFile, InputFileReader};
@@ -49,6 +49,16 @@ pub struct InteractivePrinter<'a> {
     output_wrap: OutputWrap,
 }
 
+#[derive(Clone, Copy)]
+pub enum ColorProtocol {
+    Plain,
+    Html,
+    Terminal {
+        true_color: bool,
+        use_italic_text: bool,
+    },
+}
+
 impl<'a> InteractivePrinter<'a> {
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::needless_pass_by_value)]
@@ -58,32 +68,31 @@ impl<'a> InteractivePrinter<'a> {
         reader: &mut InputFileReader,
         output_components: OutputComponents,
         theme: String,
-        colored_output: bool,
-        true_color: bool,
         term_width: usize,
         language: Option<String>,
         syntax_mapping: SyntaxMapping,
         tab_width: usize,
         show_nonprintable: bool,
         output_wrap: OutputWrap,
-        use_italic_text: bool,
+        colorize_to: ColorProtocol,
     ) -> Self {
         let theme = assets.get_theme(&theme);
         let syntax = assets.get_syntax(language, file, reader, &syntax_mapping);
         let syntax_set = &assets.syntax_set;
+        let gutter_color = theme.settings.gutter_foreground;
+
         InteractivePrinter::new2(
             theme,
             syntax,
             syntax_set,
             reader.content_type,
             output_components,
-            colored_output,
-            true_color,
+            colorize_to,
+            gutter_color,
             term_width,
             tab_width,
             show_nonprintable,
             output_wrap,
-            use_italic_text,
         )
     }
 
@@ -94,28 +103,14 @@ impl<'a> InteractivePrinter<'a> {
         syntax_set: &'a SyntaxSet,
         content_type: ContentType,
         output_components: OutputComponents,
-        colored_output: bool,
-        true_color: bool,
+        colorize_to: ColorProtocol,
+        gutter_color: Option<syntect::highlighting::Color>,
         term_width: usize,
         tab_width: usize,
         show_nonprintable: bool,
         output_wrap: OutputWrap,
-        use_italic_text: bool,
     ) -> Self {
-        let colorize = new_colorize({
-            let gutter_color = make_gutter_color(theme.settings.gutter_foreground);
-            if !colored_output {
-                ColorizeTo::Plain
-            } else if false {
-                ColorizeTo::Html { gutter_color }
-            } else {
-                ColorizeTo::Terminal {
-                    gutter_color,
-                    true_color,
-                    use_italic_text,
-                }
-            }
-        });
+        let colorize = new_colorize(colorize_to, gutter_color);
 
         let frame = Frame::new(
             term_width,

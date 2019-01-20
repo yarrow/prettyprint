@@ -9,7 +9,7 @@ use errors::*;
 use inputfile::{InputFile, InputFileReader};
 use line_range::RangeCheckResult;
 use output::OutputType;
-use printer::{InteractivePrinter, Printer};
+use printer::{ColorProtocol, InteractivePrinter, Printer};
 
 #[cfg(windows)]
 use ansi_term;
@@ -62,14 +62,6 @@ pub struct PrettyPrint {
     #[builder(default = "false")]
     loop_through: bool,
 
-    /// Whether or not the output should be colorized
-    #[builder(default = "true")]
-    colored_output: bool,
-
-    /// Whether or not the output terminal supports true color
-    #[builder(default = "is_truecolor_terminal()")]
-    true_color: bool,
-
     /// Print grid
     #[builder(default = "true")]
     grid: bool,
@@ -105,6 +97,18 @@ pub struct PrettyPrint {
     /// Command to start the pager
     #[builder(default = "None")]
     pager: Option<String>,
+
+    /// Whether or not the output should be colorized
+    #[builder(default = "true")]
+    colored_output: bool,
+
+    /// Whether or not the output is HTML
+    #[builder(default = "false")]
+    html: bool,
+
+    /// Whether or not the output terminal supports true color
+    #[builder(default = "is_truecolor_terminal()")]
+    true_color: bool,
 
     /// Whether to print some characters using italics
     #[builder(default = "false")]
@@ -157,6 +161,16 @@ impl PrettyPrint {
             s => Some(s.to_string()),
         };
 
+        let colorize_to = if !self.colored_output {
+            ColorProtocol::Plain
+        } else if self.html {
+            ColorProtocol::Html
+        } else {
+            ColorProtocol::Terminal {
+                true_color: self.true_color,
+                use_italic_text: self.use_italic_text,
+            }
+        };
         // This is faaaar from ideal, I know.
         let mut printer = InteractivePrinter::new(
             &assets,
@@ -164,15 +178,13 @@ impl PrettyPrint {
             &mut reader,
             self.get_output_components(),
             self.theme.clone(),
-            self.colored_output,
-            self.true_color,
             self.term_width,
             lang_opt,
             self.syntax_mapping.clone(),
             self.tab_width,
             self.show_nonprintable,
             self.output_wrap,
-            self.use_italic_text,
+            colorize_to,
         );
 
         let mut output_type = OutputType::from_mode(self.paging_mode, self.pager.clone())?;

@@ -12,7 +12,7 @@ impl Frame {
     pub(crate) fn new(term_width: usize, numbers: bool, grid: bool) -> Self {
         let (separator, separator_width) = if grid { (" │ ", 3) } else { (" ", 1) };
         let term_width_needed = LNUM_DIGITS + separator_width + 5;
-        let (gutter, line_number_width, separator_width) = 
+        let (gutter, line_number_width, separator_width) =
             if numbers && term_width >= term_width_needed {
                 (Some(separator), LNUM_DIGITS, separator_width)
             } else {

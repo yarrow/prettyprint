@@ -1,5 +1,5 @@
 /// This module exists to ensure that refactoring the decoration module doesn't
-/// break it.  Decorations are the items that PrettyPrinter adds to the output:
+/// break it.  Decorations are the items that `PrettyPrinter` adds to the output:
 /// line numbers, the filename or other header, and the grid lines that separate
 /// those things from the colored source code.
 extern crate serde;
@@ -9,7 +9,7 @@ use assets::HighlightingAssets;
 use content_inspector::ContentType;
 use errors::*;
 use inputfile::{InputFile, InputFileReader};
-use printer::{InteractivePrinter, Printer};
+use printer::{ColorProtocol, InteractivePrinter, Printer};
 use std::{
     collections::{HashMap, HashSet},
     fmt, fs,
@@ -238,19 +238,27 @@ fn a_printer<'a>(
     let syntax_set = &assets.syntax_set;
     let syntax = syntax_set.find_syntax_by_token("rust").unwrap();
 
+    let colorize_to = if !s.colored_output {
+        ColorProtocol::Plain
+    } else {
+        ColorProtocol::Terminal {
+            true_color: s.true_color,
+            use_italic_text: s.use_italic_text,
+        }
+    };
+
     InteractivePrinter::new2(
         &theme,
         syntax,
         syntax_set,
         s.content_type,
         get_output_components(s.grid, s.header, s.line_numbers),
-        s.colored_output,
-        s.true_color,
+        colorize_to,
+        s.gutter_color,
         s.term_width,
         s.tab_width,
         s.show_nonprintable,
         s.output_wrap,
-        s.use_italic_text,
     )
 }
 
