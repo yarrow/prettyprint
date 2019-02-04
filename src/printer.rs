@@ -79,7 +79,6 @@ impl<'a> InteractivePrinter<'a> {
         let theme = assets.get_theme(&theme);
         let syntax = assets.get_syntax(language, file, reader, &syntax_mapping);
         let syntax_set = &assets.syntax_set;
-        let gutter_color = theme.settings.gutter_foreground;
 
         InteractivePrinter::new2(
             theme,
@@ -88,7 +87,6 @@ impl<'a> InteractivePrinter<'a> {
             reader.content_type,
             output_components,
             colorize_to,
-            gutter_color,
             term_width,
             tab_width,
             show_nonprintable,
@@ -104,13 +102,12 @@ impl<'a> InteractivePrinter<'a> {
         content_type: ContentType,
         output_components: OutputComponents,
         colorize_to: ColorProtocol,
-        gutter_color: Option<syntect::highlighting::Color>,
         term_width: usize,
         tab_width: usize,
         show_nonprintable: bool,
         output_wrap: OutputWrap,
     ) -> Self {
-        let colorize = new_colorize(colorize_to, gutter_color);
+        let colorize = new_colorize(colorize_to, &theme.settings);
 
         let frame = Frame::new(
             term_width,

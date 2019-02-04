@@ -26,11 +26,11 @@ pub(crate) trait Colorize {
 
 pub(crate) fn new_colorize(
     colorize_to: ColorProtocol,
-    gutter_color: Option<sublime::Color>,
+    theme_settings: &sublime::ThemeSettings,
 ) -> Box<dyn Colorize> {
     use self::ColorProtocol::*;
 
-    let gutter_color = gutter_color.unwrap_or(SUBLIME_DEFAULT_GUTTER_COLOR);
+    let gutter_color = theme_settings.gutter_foreground.unwrap_or(SUBLIME_DEFAULT_GUTTER_COLOR);
     match colorize_to {
         Plain => Box::new(ColorizePlain()),
         Html => Box::new(ColorizeHtml::new(gutter_color)),
@@ -102,7 +102,7 @@ impl Colorize for ColorizeHtml {
 mod test_html {
     use super::*;
     fn html_colorize() -> Box<dyn Colorize> {
-        new_colorize(ColorProtocol::Html, None)
+        new_colorize(ColorProtocol::Html, &sublime::ThemeSettings::default())
     }
 
     #[test]
@@ -234,13 +234,14 @@ mod test_ansi {
     }
     #[test]
     fn colorize_none_when_colored_output_is_false() {
-        let colorize = new_colorize(ColorProtocol::Plain, None);
+        let colorize = new_colorize(ColorProtocol::Plain, &sublime::ThemeSettings::default());
         let original = "abc\nefg\n";
         assert_eq!(colorize.region(red_text(), original), original);
     }
 
-    // The following is inaccurate for ANSI codes where one of the red, green, or blue values is
-    // 1, 3, or 4 — it will mistake those for bold, italic or underlines font styles respectively.
+    // Warning: the following is inaccurate for ANSI codes where one of the red, green, or blue
+    // values is 1, 3, or 4 — it will mistake those for bold, italic or underlines font styles
+    // respectively.
     fn font_style_of(text: &str) -> FontStyle {
         // CSI: Control Sequence Introducer — ESC [
         // SGR: Select graphic rendition: a series of integer literals followed by 'm'
@@ -265,13 +266,20 @@ mod test_ansi {
         font_style
     }
 
+    fn theme_with_default_gutter_color() -> sublime::ThemeSettings {
+        sublime::ThemeSettings {
+            gutter_foreground: Some(SUBLIME_DEFAULT_GUTTER_COLOR),
+            ..sublime::ThemeSettings::default()
+        }
+    }
+
     fn terminal(true_color: bool, use_italic_text: bool) -> Box<dyn Colorize> {
         new_colorize(
             ColorProtocol::Terminal {
                 true_color,
                 use_italic_text,
             },
-            Some(SUBLIME_DEFAULT_GUTTER_COLOR),
+            &theme_with_default_gutter_color(),
         )
     }
 

@@ -26,6 +26,7 @@
 #![allow(clippy::default_trait_access)]
 #![allow(clippy::result_map_unwrap_or_else)]
 #![allow(clippy::non_ascii_literal)]
+#![allow(clippy::items_after_statements)]
 //#![warn(missing_docs)]
 
 // `error_chain!` can recurse deeply
