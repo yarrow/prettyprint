@@ -67,11 +67,13 @@ fn output_for(assets: &HighlightingAssets, settings: &PrintSettings, input: &str
 /// the original code
 #[test]
 fn ansi_samples_are_same_as_original() {
-    must_be_equal_to_stored_results(
-        ansi_sample_test_cases(),
-        "fixtures/sample-ansi-results.json",
-    );
+    let cases = ansi_sample_test_cases();
+    for k in cases.keys() {
+        println!("{}:\n{}", k, cases[k]);
+    }
+    must_be_equal_to_stored_results(cases, "fixtures/sample-ansi-results.json");
 }
+
 #[test]
 fn html_samples_are_same_as_original() {
     let cases = html_sample_test_cases();
@@ -83,8 +85,8 @@ fn html_samples_are_same_as_original() {
 
 type TestResult = HashMap<String, String>;
 fn must_be_equal_to_stored_results(actual: TestResult, expected: &str) {
-    // let new_json = serde_json::to_string_pretty(&actual).unwrap();
-    // fs::write("results.json", new_json).unwrap();
+    let new_json = serde_json::to_string_pretty(&actual).unwrap();
+    fs::write("results.json", new_json).unwrap();
     let json = String::from_utf8(fs::read(expected).unwrap()).unwrap();
     let expected: TestResult = serde_json::from_str(&json).unwrap();
     assert_eq!(actual.len(), expected.len());
@@ -189,7 +191,7 @@ const MAGENTA: Option<highlighting::Color> = Some(highlighting::Color {
     r: 255,
     g: 0,
     b: 235,
-    a: 0,
+    a: 255,
 });
 
 const FIBONACCI: &str = "

@@ -19,6 +19,12 @@ pub(crate) trait Colorize {
     fn finish(&self) -> String {
         String::default()
     }
+
+    /// Returns a `String` with the text of `label_text` in the usual foreground color
+    fn label(&self, label_text: &str) -> String {
+        label_text.to_string()
+    }
+
     /// Returns a `String` with the text of `name` in bold format.
     fn filename(&self, name: &str) -> String;
 
@@ -48,7 +54,7 @@ pub(crate) fn new_colorize(
     if !colored_output {
         Box::new(ColorizePlain { html })
     } else if html {
-        Box::new(ColorizeHtml::new(theme_settings))
+        Box::new(ColorizeHtml::new(theme_settings, use_italic_text))
     } else {
         Box::new(ColorizeANSI::new(
             theme_settings,
@@ -80,28 +86,36 @@ fn to_ansi_color(color: sublime::Color, true_color: bool) -> ansi_term::Colour {
 }
 
 struct ColorizeHtml {
-    file_style: sublime::Style,
-    grid: sublime::Style,
     background: sublime::Color,
+    gutter_style: sublime::Style,
+    label_style: sublime::Style,
+    file_style: sublime::Style,
+    use_italic_text: bool,
 }
 
 impl ColorizeHtml {
-    fn new(theme_settings: &sublime::ThemeSettings) -> Self {
+    fn new(theme_settings: &sublime::ThemeSettings, use_italic_text: bool) -> Self {
         let background = theme_settings.background.unwrap_or(sublime::Color::WHITE);
-        let grid = sublime::Style {
+        let gutter_style = sublime::Style {
+            background: theme_settings.gutter.unwrap_or(background),
             foreground: gutter_color(theme_settings),
-            background: theme_settings.gutter.unwrap_or(sublime::Color::WHITE),
+            font_style: sublime::FontStyle::empty(),
+        };
+        let label_style = sublime::Style {
+            background,
+            foreground: theme_settings.foreground.unwrap_or(sublime::Color::BLACK),
             font_style: sublime::FontStyle::empty(),
         };
         let file_style = sublime::Style {
-            foreground: theme_settings.foreground.unwrap_or(sublime::Color::BLACK),
-            background,
             font_style: sublime::FontStyle::BOLD,
+            ..label_style
         };
         Self {
-            file_style,
-            grid,
             background,
+            gutter_style,
+            label_style,
+            file_style,
+            use_italic_text,
         }
     }
 }
@@ -116,15 +130,15 @@ const END_HTML: &str = "</pre></body></html>\n";
 
 impl Colorize for ColorizeHtml {
     fn start(&self) -> String {
-        let b = self.background;
+        let background = self.background;
         format!(
             r#"{}<pre style="background-color:rgb({},{},{});">"#,
-            START_HTML, b.r, b.g, b.b
+            START_HTML, background.r, background.g, background.b
         )
     }
 
     fn finish(&self) -> String {
-        String::from(END_HTML)
+        END_HTML.to_string()
     }
 
     fn filename(&self, name: &str) -> String {
@@ -132,10 +146,15 @@ impl Colorize for ColorizeHtml {
     }
 
     fn gutter(&self, gutter_text: &str) -> String {
-        self.region(self.grid, gutter_text)
+        self.region(self.gutter_style, gutter_text)
     }
 
-    fn region(&self, style: sublime::Style, text: &str) -> String {
+    fn label(&self, label_text: &str) -> String {
+        self.region(self.label_style, label_text)
+    }
+
+    fn region(&self, mut style: sublime::Style, text: &str) -> String {
+        if !self.use_italic_text { style.font_style.remove(sublime::FontStyle::ITALIC) }
         let v = [(style, text)];
         html::styled_line_to_highlighted_html(&v, html::IncludeBackground::No)
     }
@@ -248,13 +267,19 @@ struct ColorizePlain {
 
 impl Colorize for ColorizePlain {
     fn start(&self) -> String {
-        if self.html { format!(r#"{}<pre>"#, START_HTML) }
-        else { String::default() }
+        if self.html {
+            format!(r#"{}<pre>"#, START_HTML)
+        } else {
+            String::default()
+        }
     }
 
     fn finish(&self) -> String {
-        if self.html { String::from(END_HTML) }
-        else { String::default() }
+        if self.html {
+            END_HTML.to_string()
+        } else {
+            String::default()
+        }
     }
 
     fn filename(&self, name: &str) -> String {

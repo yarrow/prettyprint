@@ -199,9 +199,9 @@ impl<'a> Printer for InteractivePrinter<'a> {
         writeln!(
             handle,
             "{}{}{}",
-            prefix,
+            self.colorize.label(prefix),
             self.colorize.filename(&name),
-            mode
+            self.colorize.label(mode),
         )?;
 
         if self.output_components.grid() {
