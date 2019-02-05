@@ -49,16 +49,6 @@ pub struct InteractivePrinter<'a> {
     output_wrap: OutputWrap,
 }
 
-#[derive(Clone, Copy)]
-pub enum ColorProtocol {
-    Plain,
-    Html,
-    Terminal {
-        true_color: bool,
-        use_italic_text: bool,
-    },
-}
-
 impl<'a> InteractivePrinter<'a> {
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::needless_pass_by_value)]
@@ -68,13 +58,16 @@ impl<'a> InteractivePrinter<'a> {
         reader: &mut InputFileReader,
         output_components: OutputComponents,
         theme: String,
+        html: bool,
+        colored_output: bool,
+        true_color: bool,
         term_width: usize,
         language: Option<String>,
         syntax_mapping: SyntaxMapping,
         tab_width: usize,
         show_nonprintable: bool,
         output_wrap: OutputWrap,
-        colorize_to: ColorProtocol,
+        use_italic_text: bool,
     ) -> Self {
         let theme = assets.get_theme(&theme);
         let syntax = assets.get_syntax(language, file, reader, &syntax_mapping);
@@ -86,7 +79,10 @@ impl<'a> InteractivePrinter<'a> {
             syntax_set,
             reader.content_type,
             output_components,
-            colorize_to,
+            html,
+            colored_output,
+            true_color,
+            use_italic_text,
             term_width,
             tab_width,
             show_nonprintable,
@@ -101,13 +97,22 @@ impl<'a> InteractivePrinter<'a> {
         syntax_set: &'a SyntaxSet,
         content_type: ContentType,
         output_components: OutputComponents,
-        colorize_to: ColorProtocol,
+        html: bool,
+        colored_output: bool,
+        true_color: bool,
+        use_italic_text: bool,
         term_width: usize,
         tab_width: usize,
         show_nonprintable: bool,
         output_wrap: OutputWrap,
     ) -> Self {
-        let colorize = new_colorize(colorize_to, &theme.settings);
+        let colorize = new_colorize(
+            html,
+            colored_output,
+            true_color,
+            use_italic_text,
+            &theme.settings,
+        );
 
         let frame = Frame::new(
             term_width,
@@ -160,6 +165,8 @@ impl<'a> Printer for InteractivePrinter<'a> {
         file: &InputFile,
         header_overwrite: Option<String>,
     ) -> Result<()> {
+        write!(handle, "{}", self.colorize.start())?;
+
         if !self.output_components.header() {
             return Ok(());
         }
@@ -210,10 +217,10 @@ impl<'a> Printer for InteractivePrinter<'a> {
 
     fn print_footer(&mut self, handle: &mut Write) -> Result<()> {
         if self.output_components.grid() && self.content_type.is_text() {
-            self.print_horizontal_line(handle, '┴')
-        } else {
-            Ok(())
+            self.print_horizontal_line(handle, '┴')?;
         }
+        write!(handle, "{}", self.colorize.finish())?;
+        Ok(())
     }
 
     fn print_line(

@@ -9,7 +9,7 @@ use assets::HighlightingAssets;
 use content_inspector::ContentType;
 use errors::*;
 use inputfile::{InputFile, InputFileReader};
-use printer::{ColorProtocol, InteractivePrinter, Printer};
+use printer::{InteractivePrinter, Printer};
 use std::{
     collections::{HashMap, HashSet},
     fmt, fs,
@@ -37,6 +37,7 @@ const LINE: &str = "abc defghijklmno pqrs tuv wxyz";
         line_numbers: true,
         colored_output: false,
         true_color: false,
+        html: false,
         term_width: 20,
         tab_width: 4,
         show_nonprintable: false,
@@ -50,6 +51,7 @@ const LINE: &str = "abc defghijklmno pqrs tuv wxyz";
     assert_eq!(result, EXPECTED);
 }
 
+// Returns a `String` with `input` pretty-printed according to `assets` and `settings`
 fn output_for(assets: &HighlightingAssets, settings: &PrintSettings, input: &str) -> String {
     let input = InputFile::String(input.to_string());
     let mut reader = input.get_reader().unwrap();
@@ -65,29 +67,20 @@ fn output_for(assets: &HighlightingAssets, settings: &PrintSettings, input: &str
 /// the original code
 #[test]
 fn ansi_samples_are_same_as_original() {
-    must_be_equal_to_stored_results(sample_test_cases(), "fixtures/sample-ansi-results.json");
+    must_be_equal_to_stored_results(
+        ansi_sample_test_cases(),
+        "fixtures/sample-ansi-results.json",
+    );
+}
+#[test]
+fn html_samples_are_same_as_original() {
+    let cases = html_sample_test_cases();
+    for k in cases.keys() {
+        println!("{}:\n{}", k, cases[k]);
+    }
+    must_be_equal_to_stored_results(cases, "fixtures/sample-html-results.json");
 }
 
-// Use `equiv` when making a change that causes new values to disagree with
-// the saved expected values, but they are equivalent under some transformation.
-//
-// Mostly it will just be simple equality:
-fn equiv(a: &String, b: &String) -> bool {
-    *a == *b
-}
-
-// Here's an example that I used when making a change that affected where ANSI codes were placed in
-// a sequence of blanks:
-/*
-fn equiv(a: &String, b: &String) -> bool {
-    a.len() == b.len() && munge(a) == munge(b)
-}
-fn munge(s: &String) -> String {
-    let mut s = s.clone();
-    s.retain(|c| c != ' ');
-    s
-}
-*/
 type TestResult = HashMap<String, String>;
 fn must_be_equal_to_stored_results(actual: TestResult, expected: &str) {
     // let new_json = serde_json::to_string_pretty(&actual).unwrap();
@@ -108,12 +101,41 @@ fn must_be_equal_to_stored_results(actual: TestResult, expected: &str) {
     }
 }
 
+// In the above, use `equiv` when making a change that causes new values to disagree with
+// the saved expected values, but they are equivalent under some transformation that doesn't
+// affect the visual output.
+//
+// Mostly it will just be simple equality:
+fn equiv(a: &str, b: &str) -> bool {
+    *a == *b
+}
+
+// Here's an example that I used when making a change that affected where ANSI codes were placed in
+// a sequence of blanks:
+/*
+fn equiv(a: &String, b: &String) -> bool {
+    a.len() == b.len() && munge(a) == munge(b)
+}
+fn munge(s: &String) -> String {
+    let mut s = s.clone();
+    s.retain(|c| c != ' ');
+    s
+}
+*/
+
 /// The sample test cases take reasonable default settings and change each
 /// individual setting one by one.
-fn sample_test_cases() -> TestResult {
+fn ansi_sample_test_cases() -> TestResult {
+    sample_test_cases(false)
+}
+fn html_sample_test_cases() -> TestResult {
+    sample_test_cases(true)
+}
+fn sample_test_cases(html: bool) -> TestResult {
     let assets = HighlightingAssets::new();
     let mut results = TestResult::new();
     let default = PrintSettings {
+        html,
         content_type: ContentType::UTF_8,
         grid: true,
         header: true,
@@ -155,7 +177,7 @@ fn sample_test_cases() -> TestResult {
         PrintSettings { term_width: 10, grid: false, ..wrapped },
     ];
 
-    for settings in tests.iter() {
+    for settings in &tests {
         let (key, result) = test_with(&assets, settings);
         results.insert(key, result);
     }
@@ -170,7 +192,7 @@ const MAGENTA: Option<highlighting::Color> = Some(highlighting::Color {
     a: 0,
 });
 
-const FIB: &str = "
+const FIBONACCI: &str = "
 pub fn fib(n: usize) -> usize {
     match n {
         0 | 1 => 1,
@@ -179,12 +201,12 @@ pub fn fib(n: usize) -> usize {
 }
 ";
 
-fn pretty_fib(assets: &HighlightingAssets, settings: &PrintSettings) -> String {
-    output_for(&assets, &settings, FIB)
+fn pretty_printed_fibonacci(assets: &HighlightingAssets, settings: &PrintSettings) -> String {
+    output_for(&assets, &settings, FIBONACCI)
 }
 
 fn test_with(assets: &HighlightingAssets, settings: &PrintSettings) -> (String, String) {
-    let result = pretty_fib(&assets, &settings);
+    let result = pretty_printed_fibonacci(&assets, &settings);
     let key: String = format!("{}", settings);
     //                                                println!("{}:\n{}", key, result);
     (key, result)
@@ -197,7 +219,7 @@ fn pretty_printed<'a, P: Printer>(
 ) -> Result<Vec<u8>> {
     let mut output: Vec<u8> = b"".to_vec();
 
-    // Fragile! Only works because print_header only looks at the file name in
+    // Fragile! Works because print_header only looks at the file name in
     // InputFile::Ordinary(filename)
     const FERRIS: &str = "Ferris was here";
     let (fname, title) = if header_overwrite {
@@ -238,23 +260,16 @@ fn a_printer<'a>(
     let syntax_set = &assets.syntax_set;
     let syntax = syntax_set.find_syntax_by_token("rust").unwrap();
 
-    let colorize_to = if !s.colored_output {
-        ColorProtocol::Plain
-    } else {
-        ColorProtocol::Terminal {
-            true_color: s.true_color,
-            use_italic_text: s.use_italic_text,
-        }
-    };
-
     InteractivePrinter::new2(
         &theme,
         syntax,
         syntax_set,
         s.content_type,
         get_output_components(s.grid, s.header, s.line_numbers),
-        colorize_to,
-        s.gutter_color,
+        s.html,
+        s.colored_output,
+        s.true_color,
+        s.use_italic_text,
         s.term_width,
         s.tab_width,
         s.show_nonprintable,
@@ -282,6 +297,7 @@ struct PrintSettings {
     header: bool,
     line_numbers: bool,
     colored_output: bool,
+    html: bool,
     true_color: bool,
     term_width: usize,
     tab_width: usize,
@@ -292,7 +308,8 @@ struct PrintSettings {
     gutter_color: Option<highlighting::Color>,
 }
 
-/// We implement Display so we can have human-readable keys in TestResult
+/// We implement `Display` so we can have human-readable keys in `TestResult`
+/// We *don't* print `html` because HTML output goes in a different file
 impl fmt::Display for PrintSettings {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut c = String::new();
@@ -341,10 +358,10 @@ impl fmt::Display for PrintSettings {
 #[test]
 #[ignore] // Too expensive for routine testing -- almost 14,000 combinations
 fn long_ansi_is_same_as_orginal() {
-    must_be_equal_to_stored_results(all_test_cases(), "fixtures/ansi-results.json");
+    must_be_equal_to_stored_results(all_ansi_test_cases(), "fixtures/ansi-results.json");
 }
 
-fn all_test_cases() -> TestResult {
+fn all_ansi_test_cases() -> TestResult {
     const BOOLEANS: &[bool; 2] = &[false, true];
     let assets = HighlightingAssets::new();
     let mut results = TestResult::new();
@@ -368,6 +385,7 @@ fn all_test_cases() -> TestResult {
                                 line_numbers: *line_numbers,
                                 colored_output: *colored_output,
                                 true_color: *true_color,
+                                html: false,
                                 term_width: *term_width,
                                 tab_width: *tab_width,
                                 show_nonprintable: *show_nonprintable,

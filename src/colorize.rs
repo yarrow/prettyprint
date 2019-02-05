@@ -1,5 +1,4 @@
 use ansi_term as ansi;
-use printer::ColorProtocol;
 use syntect::highlighting as sublime;
 use syntect::html;
 
@@ -12,11 +11,20 @@ use syntect::html;
 /// styles.
 
 pub(crate) trait Colorize {
+    /// Returns a string to set up the colorization (`<pre>` for HTML, for instance)
+    fn start(&self) -> String {
+        String::default()
+    }
+    /// Returns a string to finish the colorization (`</pre>' for HTML, for instance).
+    fn finish(&self) -> String {
+        String::default()
+    }
     /// Returns a `String` with the text of `name` in bold format.
     fn filename(&self, name: &str) -> String;
 
-    /// Returns a `String` colored with the gutter color passed to
-    /// `new_colorize`.
+    /// Returns a `String` colored with the gutter foreground color from the
+    /// theme settings passed to `new_colorize`.
+
     fn gutter(&self, gutter_text: &str) -> String;
 
     /// Returns a `String` with `text` colored (and font-styled) according to
@@ -24,20 +32,29 @@ pub(crate) trait Colorize {
     fn region(&self, style: sublime::Style, text: &str) -> String;
 }
 
+fn gutter_color(theme_settings: &sublime::ThemeSettings) -> sublime::Color {
+    theme_settings
+        .gutter_foreground
+        .unwrap_or(SUBLIME_DEFAULT_GUTTER_COLOR)
+}
+
 pub(crate) fn new_colorize(
-    colorize_to: ColorProtocol,
+    html: bool,
+    colored_output: bool,
+    true_color: bool,
+    use_italic_text: bool,
     theme_settings: &sublime::ThemeSettings,
 ) -> Box<dyn Colorize> {
-    use self::ColorProtocol::*;
-
-    let gutter_color = theme_settings.gutter_foreground.unwrap_or(SUBLIME_DEFAULT_GUTTER_COLOR);
-    match colorize_to {
-        Plain => Box::new(ColorizePlain()),
-        Html => Box::new(ColorizeHtml::new(gutter_color)),
-        Terminal {
+    if !colored_output {
+        Box::new(ColorizePlain { html })
+    } else if html {
+        Box::new(ColorizeHtml::new(theme_settings))
+    } else {
+        Box::new(ColorizeANSI::new(
+            theme_settings,
             true_color,
             use_italic_text,
-        } => Box::new(ColorizeANSI::new(gutter_color, true_color, use_italic_text)),
+        ))
     }
 }
 
@@ -65,25 +82,51 @@ fn to_ansi_color(color: sublime::Color, true_color: bool) -> ansi_term::Colour {
 struct ColorizeHtml {
     file_style: sublime::Style,
     grid: sublime::Style,
+    background: sublime::Color,
 }
 
 impl ColorizeHtml {
-    fn new(gutter_color: sublime::Color) -> Self {
+    fn new(theme_settings: &sublime::ThemeSettings) -> Self {
+        let background = theme_settings.background.unwrap_or(sublime::Color::WHITE);
         let grid = sublime::Style {
-            foreground: gutter_color,
-            background: sublime::Color::WHITE,
+            foreground: gutter_color(theme_settings),
+            background: theme_settings.gutter.unwrap_or(sublime::Color::WHITE),
             font_style: sublime::FontStyle::empty(),
         };
         let file_style = sublime::Style {
-            foreground: sublime::Color::BLACK,
-            background: sublime::Color::WHITE,
+            foreground: theme_settings.foreground.unwrap_or(sublime::Color::BLACK),
+            background,
             font_style: sublime::FontStyle::BOLD,
         };
-        Self { file_style, grid }
+        Self {
+            file_style,
+            grid,
+            background,
+        }
     }
 }
 
+const START_HTML: &str = r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<body>
+"#;
+const END_HTML: &str = "</pre></body></html>\n";
+
 impl Colorize for ColorizeHtml {
+    fn start(&self) -> String {
+        let b = self.background;
+        format!(
+            r#"{}<pre style="background-color:rgb({},{},{});">"#,
+            START_HTML, b.r, b.g, b.b
+        )
+    }
+
+    fn finish(&self) -> String {
+        String::from(END_HTML)
+    }
+
     fn filename(&self, name: &str) -> String {
         self.region(self.file_style, name)
     }
@@ -102,7 +145,17 @@ impl Colorize for ColorizeHtml {
 mod test_html {
     use super::*;
     fn html_colorize() -> Box<dyn Colorize> {
-        new_colorize(ColorProtocol::Html, &sublime::ThemeSettings::default())
+        const HTML: bool = true;
+        const COLORED_OUTPUT: bool = true;
+        const TRUE_COLOR: bool = true;
+        const USE_ITALIC_TEXT: bool = true;
+        new_colorize(
+            HTML,
+            COLORED_OUTPUT,
+            TRUE_COLOR,
+            USE_ITALIC_TEXT,
+            &sublime::ThemeSettings::default(),
+        )
     }
 
     #[test]
@@ -150,9 +203,13 @@ struct ColorizeANSI {
 }
 
 impl ColorizeANSI {
-    fn new(gutter_color: sublime::Color, true_color: bool, use_italic_text: bool) -> Self {
+    fn new(
+        theme_settings: &sublime::ThemeSettings,
+        true_color: bool,
+        use_italic_text: bool,
+    ) -> Self {
         let file_style = ansi::Style::new().bold();
-        let grid = to_ansi_color(gutter_color, true_color).normal();
+        let grid = to_ansi_color(gutter_color(theme_settings), true_color).normal();
         Self {
             true_color,
             use_italic_text,
@@ -185,8 +242,21 @@ impl Colorize for ColorizeANSI {
     }
 }
 
-struct ColorizePlain();
+struct ColorizePlain {
+    html: bool,
+}
+
 impl Colorize for ColorizePlain {
+    fn start(&self) -> String {
+        if self.html { format!(r#"{}<pre>"#, START_HTML) }
+        else { String::default() }
+    }
+
+    fn finish(&self) -> String {
+        if self.html { String::from(END_HTML) }
+        else { String::default() }
+    }
+
     fn filename(&self, name: &str) -> String {
         name.to_string()
     }
@@ -225,7 +295,7 @@ mod test_ansi {
     }
     #[test]
     fn test_plain() {
-        let colorize = ColorizePlain();
+        let colorize = ColorizePlain { html: false };
         let original = "abc\nefg\n";
         assert_eq!(colorize.filename(original), original);
         assert_eq!(colorize.gutter(original), original);
@@ -234,9 +304,21 @@ mod test_ansi {
     }
     #[test]
     fn colorize_none_when_colored_output_is_false() {
-        let colorize = new_colorize(ColorProtocol::Plain, &sublime::ThemeSettings::default());
-        let original = "abc\nefg\n";
-        assert_eq!(colorize.region(red_text(), original), original);
+        const NO_COLORED_OUTPUT: bool = false;
+        const NOT_HTML: bool = false;
+        for true_color in &[false, true] {
+            for use_italic_text in &[false, true] {
+                let colorize = new_colorize(
+                    NOT_HTML,
+                    NO_COLORED_OUTPUT,
+                    *true_color,
+                    *use_italic_text,
+                    &sublime::ThemeSettings::default(),
+                );
+                let original = "abc\nefg\n";
+                assert_eq!(colorize.region(red_text(), original), original);
+            }
+        }
     }
 
     // Warning: the following is inaccurate for ANSI codes where one of the red, green, or blue
@@ -274,11 +356,13 @@ mod test_ansi {
     }
 
     fn terminal(true_color: bool, use_italic_text: bool) -> Box<dyn Colorize> {
+        const COLORED_OUTPUT: bool = true;
+        const NOT_HTML: bool = false;
         new_colorize(
-            ColorProtocol::Terminal {
-                true_color,
-                use_italic_text,
-            },
+            NOT_HTML,
+            COLORED_OUTPUT,
+            true_color,
+            use_italic_text,
             &theme_with_default_gutter_color(),
         )
     }
