@@ -66,11 +66,9 @@ mod printer;
 mod style;
 mod syntax_mapping;
 
+pub use crate::builder::{PagingMode, PrettyPrint, PrettyPrinter};
 #[cfg(test)]
 mod test_ansi_code_preservation;
-
-pub use builder::{PagingMode, PrettyPrint, PrettyPrinter};
-// pub use style::OutputComponent;
 
 mod errors {
     error_chain! {

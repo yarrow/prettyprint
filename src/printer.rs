@@ -1,7 +1,7 @@
 use std::io::Write;
 
-use style::OutputComponents;
-use syntax_mapping::SyntaxMapping;
+use crate::style::OutputComponents;
+use crate::syntax_mapping::SyntaxMapping;
 
 use syntect::easy::HighlightLines;
 use syntect::highlighting::Theme;
@@ -12,13 +12,13 @@ use content_inspector::ContentType;
 use encoding::all::{UTF_16BE, UTF_16LE};
 use encoding::{DecoderTrap, Encoding};
 
-use assets::HighlightingAssets;
-use colorize::{new_colorize, Colorize};
-use errors::*;
-use frame::Frame;
-use inputfile::{InputFile, InputFileReader};
-use preprocessor::{expand_tabs, replace_nonprintable};
-use style::OutputWrap;
+use crate::assets::HighlightingAssets;
+use crate::colorize::{new_colorize, Colorize};
+use crate::errors::*;
+use crate::frame::Frame;
+use crate::inputfile::{InputFile, InputFileReader};
+use crate::preprocessor::{expand_tabs, replace_nonprintable};
+use crate::style::OutputWrap;
 
 pub trait Printer {
     fn print_header(
