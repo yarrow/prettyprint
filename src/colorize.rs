@@ -121,7 +121,7 @@ impl ColorizeHtml {
 }
 
 const START_HTML: &str = r#"<!DOCTYPE html>
-<html lang="en">
+<html lang="">
 <head>
 <meta charset="utf-8"/>
 <body>
